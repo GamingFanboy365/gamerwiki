@@ -3858,6 +3858,15 @@ class Parser {
 		if ( isset( $this->mDoubleUnderscores['hiddencat'] ) && $this->mTitle->getNamespace() == NS_CATEGORY ) {
 			$this->addTrackingCategory( 'hidden-category-category' );
 		}
+		# GamerWiki (backported from MediaWiki 1.33): keep intentionally
+		# empty categories off Special:UnusedCategories.
+		if ( isset( $this->mDoubleUnderscores['expectunusedcategory'] ) ) {
+			if ( $this->mTitle->getNamespace() == NS_CATEGORY ) {
+				$this->addTrackingCategory( 'expected-unused-category-category' );
+			} else {
+				unset( $this->mDoubleUnderscores['expectunusedcategory'] );
+			}
+		}
 		# (bug 8068) Allow control over whether robots index a page.
 		#
 		# @todo FIXME: Bug 14899: __INDEX__ always overrides __NOINDEX__ here!  This

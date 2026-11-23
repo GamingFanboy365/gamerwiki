@@ -38,15 +38,22 @@ class UnusedCategoriesPage extends QueryPage {
 
 	function getQueryInfo() {
 		return array (
-			'tables' => array ( 'page', 'categorylinks' ),
+			'tables' => array ( 'page', 'categorylinks', 'page_props' ),
 			'fields' => array ( 'page_namespace AS namespace',
 					'page_title AS title',
 					'page_title AS value' ),
 			'conds' => array ( 'cl_from IS NULL',
 					'page_namespace' => NS_CATEGORY,
-					'page_is_redirect' => 0 ),
-			'join_conds' => array ( 'categorylinks' => array (
-					'LEFT JOIN', 'cl_to = page_title' ) )
+					'page_is_redirect' => 0,
+					// Skip categories marked __EXPECTUNUSEDCATEGORY__
+					'pp_page IS NULL' ),
+			'join_conds' => array (
+				'categorylinks' => array ( 'LEFT JOIN', 'cl_to = page_title' ),
+				'page_props' => array ( 'LEFT JOIN', array (
+					'page_id = pp_page',
+					'pp_propname' => 'expectunusedcategory'
+				) )
+			)
 		);
 	}
 

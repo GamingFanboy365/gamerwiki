@@ -148,6 +148,7 @@ $wgMessageStructure = array(
 		'category-empty',
 		'hidden-categories',
 		'hidden-category-category',
+		'expected-unused-category-category',
 		'category-subcat-count',
 		'category-subcat-count-limited',
 		'category-article-count',

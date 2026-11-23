@@ -183,6 +183,7 @@ class MagicWord {
 		'newsectionlink',
 		'nonewsectionlink',
 		'hiddencat',
+		'expectunusedcategory',
 		'index',
 		'noindex',
 		'staticredirect',
