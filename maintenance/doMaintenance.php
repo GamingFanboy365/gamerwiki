@@ -6,88 +6,108 @@
  * of their caller, and B) MediaWiki has way too many globals. So instead
  * we'll kinda fake it, and do the requires() inline. <3 PHP
  *
- * @license GPL-2.0-or-later
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
+ * @author Chad Horohoe <chad@anyonecanedit.org>
  * @file
  * @ingroup Maintenance
  */
-
-use MediaWiki\Maintenance\MaintenanceRunner;
-use MediaWiki\Settings\SettingsBuilder;
-
-// No AutoLoader yet
-require_once __DIR__ . '/includes/MaintenanceRunner.php';
-require_once __DIR__ . '/includes/MaintenanceParameters.php';
 
 if ( !defined( 'RUN_MAINTENANCE_IF_MAIN' ) ) {
 	echo "This file must be included after Maintenance.php\n";
 	exit( 1 );
 }
 
-// Wasn't included from the file scope, halt execution (probably wanted the class).
-// This typically happens when a maintenance script is executed using run.php.
-// @phan-suppress-next-line PhanRedundantValueComparisonInGlobalScope
-if ( !MaintenanceRunner::shouldExecute() && $maintClass != CommandLineInc::class ) {
+// Wasn't included from the file scope, halt execution (probably wanted the class)
+// If a class is using commandLine.inc (old school maintenance), they definitely
+// cannot be included and will proceed with execution
+if( !Maintenance::shouldExecute() && $maintClass != 'CommandLineInc' ) {
 	return;
 }
 
-// @phan-suppress-next-line PhanImpossibleConditionInGlobalScope
 if ( !$maintClass || !class_exists( $maintClass ) ) {
 	echo "\$maintClass is not set or is set to a non-existent class.\n";
 	exit( 1 );
 }
 
-// Define the MediaWiki entrypoint
-define( 'MEDIAWIKI', true );
+// Get an object to start us off
+$maintenance = new $maintClass();
 
-$IP = wfDetectInstallPath(); // ensures MW_INSTALL_PATH is defined
-require_once "$IP/includes/AutoLoader.php";
-
-$runner = new MaintenanceRunner();
-$runner->initForClass( $maintClass, $GLOBALS['argv'] );
+// Basic sanity checks and such
+$maintenance->setup();
 
 // We used to call this variable $self, but it was moved
 // to $maintenance->mSelf. Keep that here for b/c
-$self = $runner->getName();
+$self = $maintenance->getName();
 
-$runner->defineSettings();
+// Detect compiled mode
+if ( isset( $_SERVER['MW_COMPILED'] ) ) {
+	define( 'MW_COMPILED', 1 );
+} else {
+	# Get the MWInit class
+	require_once( "$IP/includes/Init.php" );
+	require_once( "$IP/includes/AutoLoader.php" );
+}
 
-// Custom setup for Maintenance entry point
-if ( !defined( 'MW_FINAL_SETUP_CALLBACK' ) ) {
+# Stub the profiler
+require_once( MWInit::compiledPath( 'includes/profiler/Profiler.php' ) );
 
-	/**
-	 * Define a function, since we can't put a closure or object
-	 * reference into MW_FINAL_SETUP_CALLBACK.
-	 */
-	function wfMaintenanceSetup( SettingsBuilder $settingsBuilder ) {
-		global $runner;
-		$runner->setup( $settingsBuilder );
+// Some other requires
+if ( !defined( 'MW_COMPILED' ) ) {
+	require_once( "$IP/includes/Defines.php" );
+}
+require_once( MWInit::compiledPath( 'includes/DefaultSettings.php' ) );
+
+if ( defined( 'MW_CONFIG_CALLBACK' ) ) {
+	# Use a callback function to configure MediaWiki
+	MWFunction::call( MW_CONFIG_CALLBACK );
+} else {
+	if ( file_exists( "$IP/../wmf-config/wikimedia-mode" ) ) {
+		// Load settings, using wikimedia-mode if needed
+		// @todo FIXME: Replace this hack with general farm-friendly code
+		# @todo FIXME: Wikimedia-specific stuff needs to go away to an ext
+		# Maybe a hook?
+		global $cluster;
+		$cluster = 'pmtpa';
+		require( MWInit::interpretedPath( '../wmf-config/wgConf.php' ) );
 	}
-
-	define( 'MW_FINAL_SETUP_CALLBACK', wfMaintenanceSetup( ... ) );
+	// Require the configuration (probably LocalSettings.php)
+	require( $maintenance->loadSettings() );
 }
 
-// Initialize MediaWiki (load settings, initialized session,
-// enable MediaWikiServices)
-require_once "$IP/includes/Setup.php";
-
-// We only get here if the script was invoked directly.
-// If it was loaded by MaintenanceRunner, MaintenanceRunner::shouldExecute() would have returned false,
-// and we would have returned from this file early.
-
-if ( stream_isatty( STDOUT ) ) {
-	echo "\n";
-	echo "*******************************************************************************\n";
-	echo "NOTE: Do not run maintenance scripts directly, use maintenance/run.php instead!\n";
-	echo "      Running scripts directly has been deprecated in MediaWiki 1.40.\n";
-	echo "      It may not work for some (or any) scripts in the future.\n";
-	echo "*******************************************************************************\n";
-	echo "\n";
+if ( $maintenance->getDbType() === Maintenance::DB_ADMIN &&
+	is_readable( "$IP/AdminSettings.php" ) )
+{
+	require( MWInit::interpretedPath( 'AdminSettings.php' ) );
 }
+$maintenance->finalSetup();
+// Some last includes
+require_once( MWInit::compiledPath( 'includes/Setup.php' ) );
 
-// Do it!
-$success = $runner->run();
+// Much much faster startup than creating a title object
+$wgTitle = null;
 
-// Exit with an error status if execute() returned false
-if ( !$success ) {
+// Do the work
+try {
+	$maintenance->execute();
+
+	// Potentially debug globals
+	$maintenance->globals();
+} catch ( MWException $mwe ) {
+	echo( $mwe->getText() );
 	exit( 1 );
 }
+

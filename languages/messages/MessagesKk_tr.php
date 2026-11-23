@@ -1,9 +1,13 @@
 <?php
 /** Kazakh (Turkey) (‪Qazaqşa (Türkïya)‬)
  *
+ * See MessagesQqq.php for message documentation incl. usage of parameters
+ * To improve a translation please visit http://translatewiki.net
+ *
+ * @ingroup Language
  * @file
- * @ingroup Languages
+ *
  */
 
 # Inherit everything for now
-$fallback = 'kk-latn, kk, kk-cyrl';
+$fallback = 'kk-latn, kk-cyrl';

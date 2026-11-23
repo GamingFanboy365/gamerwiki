@@ -1,31 +1,34 @@
 <?php
 /**
- * Prune file cache for pages, objects, resources, etc.
+ * Prune file cache for pages, objects, resources, ect...
  *
- * @license GPL-2.0-or-later
- * @file
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @ingroup Maintenance
  */
 
-use MediaWiki\Maintenance\Maintenance;
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that prunes file cache for pages, objects, resources, etc.
- *
- * @ingroup Maintenance
- */
 class PruneFileCache extends Maintenance {
 
-	/** @var int */
 	protected $minSurviveTimestamp;
 
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Delete file cache files older than "agedays"' );
+		$this->mDescription = "Build file cache for content pages";
 		$this->addOption( 'agedays', 'How many days old files must be in order to delete', true, true );
 		$this->addOption( 'subdir', 'Prune one $wgFileCacheDirectory subdirectory name', false, true );
 	}
@@ -34,25 +37,25 @@ class PruneFileCache extends Maintenance {
 		global $wgUseFileCache, $wgFileCacheDirectory;
 
 		if ( !$wgUseFileCache ) {
-			$this->fatalError( "Nothing to do -- \$wgUseFileCache is disabled." );
+			$this->error( "Nothing to do -- \$wgUseFileCache is disabled.", true );
 		}
 
 		$age = $this->getOption( 'agedays' );
 		if ( !ctype_digit( $age ) ) {
-			$this->fatalError( "Non-integer 'age' parameter given." );
+			$this->error( "Non-integer 'age' parameter given.", true );
 		}
 		// Delete items with a TS older than this
 		$this->minSurviveTimestamp = time() - ( 86400 * $age );
 
 		$dir = $wgFileCacheDirectory;
 		if ( !is_dir( $dir ) ) {
-			$this->fatalError( "Nothing to do -- \$wgFileCacheDirectory directory not found." );
+			$this->error( "Nothing to do -- \$wgFileCacheDirectory directory not found.", true );
 		}
 
 		$subDir = $this->getOption( 'subdir' );
 		if ( $subDir !== null ) {
 			if ( !is_dir( "$dir/$subDir" ) ) {
-				$this->fatalError( "The specified subdirectory `$subDir` does not exist." );
+				$this->error( "The specified subdirectory `$subDir` does not exist.", true );
 			}
 			$this->output( "Pruning `$dir/$subDir` directory...\n" );
 			$this->prune_directory( "$dir/$subDir", 'report' );
@@ -66,18 +69,16 @@ class PruneFileCache extends Maintenance {
 	}
 
 	/**
-	 * @param string $dir
-	 * @param string|bool $report Use 'report' to report the directories being scanned
+	 * @param $dir string
+	 * @param $report string|bool Use 'report' to report the directories being scanned
 	 */
 	protected function prune_directory( $dir, $report = false ) {
 		$tsNow = time();
 		$dirHandle = opendir( $dir );
-		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
-		while ( ( $file = readdir( $dirHandle ) ) !== false ) {
+		while ( false !== ( $file = readdir( $dirHandle ) ) ) {
 			// Skip ".", "..", and also any dirs or files like ".svn" or ".htaccess"
 			if ( $file[0] != "." ) {
-				// absolute
-				$path = $dir . '/' . $file;
+				$path = $dir . '/' . $file; // absolute
 				if ( is_dir( $path ) ) {
 					if ( $report === 'report' ) {
 						$this->output( "Scanning `$path`...\n" );
@@ -85,11 +86,11 @@ class PruneFileCache extends Maintenance {
 					$this->prune_directory( $path );
 				} else {
 					$mts = filemtime( $path );
-					// Check the file extension against known cache types
+					// Sanity check the file extension against known cache types
 					if ( $mts < $this->minSurviveTimestamp
 						&& preg_match( '/\.(?:html|cache)(?:\.gz)?$/', $file )
-						&& unlink( $path )
-					) {
+						&& unlink( $path ) )
+					{
 						$daysOld = round( ( $tsNow - $mts ) / 86400, 2 );
 						$this->output( "Deleted `$path` [days=$daysOld]\n" );
 					}
@@ -100,7 +101,5 @@ class PruneFileCache extends Maintenance {
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = PruneFileCache::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "PruneFileCache";
+require_once( RUN_MAINTENANCE_IF_MAIN );

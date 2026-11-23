@@ -6,172 +6,261 @@
  * generation.
  *
  * Usage:
- *   php maintenance/mwdocgen.php
+ *   php mwdocgen.php
  *
- * @license GPL-2.0-or-later
+ * KNOWN BUGS:
+ *
+ * - pass_thru seems to always use buffering (even with ob_implicit_flush()),
+ * that make output slow when doxygen parses language files.
+ * - the menu doesnt work, got disabled at revision 13740. Need to code it.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @file
  * @todo document
  * @ingroup Maintenance
  *
  * @author Antoine Musso <hashar at free dot fr>
- * @author Brooke Vibber
+ * @author Brion Vibber
  * @author Alexandre Emsenhuber
  * @version first release
  */
 
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Shell\Shell;
+#
+# Variables / Configuration
+#
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
+if ( php_sapi_name() != 'cli' ) {
+	echo 'Run "' . __FILE__ . '" from the command line.';
+	die( -1 );
+}
+
+/** Figure out the base directory for MediaWiki location */
+$mwPath = dirname( dirname( __FILE__ ) ) . DIRECTORY_SEPARATOR;
+
+/** doxygen binary script */
+$doxygenBin = 'doxygen';
+
+/** doxygen configuration template for mediawiki */
+$doxygenTemplate = $mwPath . 'maintenance/Doxyfile';
+
+/** where Phpdoc should output documentation */
+$doxyOutput = $mwPath . 'docs' . DIRECTORY_SEPARATOR ;
+
+$doxyVersion = 'master';
+
+/** MediaWiki subpaths */
+$mwPathI = $mwPath . 'includes/';
+$mwPathL = $mwPath . 'languages/';
+$mwPathM = $mwPath . 'maintenance/';
+$mwPathS = $mwPath . 'skins/';
+
+/** Ignored paths relative to $mwPath */
+$mwExcludePaths = array(
+	'images',
+	'static',
+);
+
+/** Variable to get user input */
+$input = '';
+$exclude_patterns = '';
+
+#
+# Functions
+#
+
+define( 'MEDIAWIKI', true );
+require_once( "$mwPath/includes/GlobalFunctions.php" );
 
 /**
- * Maintenance script that builds doxygen documentation.
- * @ingroup Maintenance
+ * Read a line from the shell
+ * @param $prompt String
+ * @return string
  */
-class MWDocGen extends Maintenance {
-	/** @var string */
-	private $doxygen;
-	/** @var string */
-	private $mwVersion;
-	/** @var string */
-	private $output;
-	/** @var string */
-	private $input;
-	/** @var string */
-	private $inputFilter;
-	/** @var string */
-	private $template;
-	/** @var string[] */
-	private $excludes;
-	/** @var bool */
-	private $doDot;
+function readaline( $prompt = '' ) {
+	print $prompt;
+	$fp = fopen( "php://stdin", "r" );
+	$resp = trim( fgets( $fp, 1024 ) );
+	fclose( $fp );
+	return $resp;
+}
 
-	/**
-	 * Prepare Maintenance class
-	 */
-	public function __construct() {
-		parent::__construct();
-		$this->addDescription( 'Build doxygen documentation' );
+/**
+ * Generate a configuration file given user parameters and return the temporary filename.
+ * @param $doxygenTemplate String: full path for the template.
+ * @param $outputDirectory String: directory where the stuff will be output.
+ * @param $stripFromPath String: path that should be stripped out (usually mediawiki base path).
+ * @param $currentVersion String: Version number of the software
+ * @param $input String: Path to analyze.
+ * @param $exclude String: Additionals path regex to exclude
+ * @param $exclude_patterns String: Additionals path regex to exclude
+ *                 (LocalSettings.php, AdminSettings.php, .svn and .git directories are always excluded)
+ * @return string
+ */
+function generateConfigFile( $doxygenTemplate, $outputDirectory, $stripFromPath, $currentVersion, $input, $exclude, $exclude_patterns ) {
+	global $wgDoxyGenerateMan;
 
-		$this->addOption( 'doxygen',
-			'Path to doxygen',
-			false, true );
-		$this->addOption( 'version',
-			'Pass a MediaWiki version',
-			false, true );
-		$this->addOption( 'file',
-			"Only process given file or directory. Multiple values " .
-			"accepted with comma separation. Path relative to MW_INSTALL_PATH.",
-			false, true );
-		$this->addOption( 'output',
-			'Path to write doc to',
-			false, true );
-		$this->addOption( 'extensions',
-			'Process the extensions/ directory as well (ignored if --file is used)' );
-		$this->addOption( 'skins',
-			'Process the skins/ directory as well (ignored if --file is used)' );
-	}
+	$template = file_get_contents( $doxygenTemplate );
 
-	/** @inheritDoc */
-	public function getDbType() {
-		return Maintenance::DB_NONE;
-	}
+	// Replace template placeholders by correct values.
+	$replacements = array(
+		'{{OUTPUT_DIRECTORY}}' => $outputDirectory,
+		'{{STRIP_FROM_PATH}}'  => $stripFromPath,
+		'{{CURRENT_VERSION}}'  => $currentVersion,
+		'{{INPUT}}'            => $input,
+		'{{EXCLUDE}}'          => $exclude,
+		'{{EXCLUDE_PATTERNS}}' => $exclude_patterns,
+		'{{HAVE_DOT}}'         => `which dot` ? 'YES' : 'NO',
+		'{{GENERATE_MAN}}'     => $wgDoxyGenerateMan ? 'YES' : 'NO',
+	);
+	$tmpCfg = str_replace( array_keys( $replacements ), array_values( $replacements ), $template );
+	$tmpFileName = tempnam( wfTempDir(), 'mwdocgen-' );
+	file_put_contents( $tmpFileName , $tmpCfg ) or die( "Could not write doxygen configuration to file $tmpFileName\n" );
 
-	protected function init() {
-		global $wgPhpCli;
+	return $tmpFileName;
+}
 
-		$this->doxygen = $this->getOption( 'doxygen', 'doxygen' );
-		$this->mwVersion = $this->getOption( 'version', 'master' );
+#
+# Main !
+#
 
-		$this->output = $this->getOption( 'output', 'docs' );
+unset( $file );
 
-		// Do not use wfShellWikiCmd, because mwdoc-filter.php is not
-		// a Maintenance script.
-		$this->inputFilter = Shell::escape( [
-			$wgPhpCli,
-			MW_INSTALL_PATH . '/maintenance/mwdoc-filter.php'
-		] );
-
-		$this->template = MW_INSTALL_PATH . '/maintenance/Doxyfile';
-		$this->excludes = [
-			'cache',
-			'images',
-		];
-
-		$file = $this->getOption( 'file' );
-		if ( $file !== null ) {
-			$this->input = '';
-			foreach ( explode( ',', $file ) as $input ) {
-				// Doxygen inputs are space separated and double quoted
-				$this->input .= " \"$input\"";
+if ( is_array( $argv ) ) {
+	for ($i = 0; $i < count($argv); $i++ ) {
+		switch( $argv[$i] ) {
+		case '--all':         $input = 0; break;
+		case '--includes':    $input = 1; break;
+		case '--languages':   $input = 2; break;
+		case '--maintenance': $input = 3; break;
+		case '--skins':       $input = 4; break;
+		case '--file':
+			$input = 5;
+			$i++;
+			if ( isset( $argv[$i] ) ) {
+				$file = $argv[$i];
 			}
-		} else {
-			// If no explicit --file filter is set, we're indexing all of MediaWiki core
-			// in MW_INSTALL_PATH, but not extension and skin submodules (T317451).
-			$this->input = '';
-			if ( !$this->hasOption( 'extensions' ) ) {
-				$this->excludes[] = 'extensions';
+			break;
+		case '--no-extensions': $input = 6; break;
+		case '--output':
+			$i++;
+			if ( isset( $argv[$i] ) ) {
+				$doxyOutput = realpath( $argv[$i] );
 			}
-			if ( !$this->hasOption( 'skins' ) ) {
-				$this->excludes[] = 'skins';
+			break;
+		case '--version':
+			$i++;
+			if ( isset( $argv[$i] ) ) {
+				$doxyVersion = $argv[$i];
 			}
-		}
+			break;
+		case '--generate-man':
+			$wgDoxyGenerateMan = true;
+			break;
+		case '--help':
+			print <<<END
+Usage: php mwdocgen.php [<command>] [<options>]
 
-		$this->doDot = (bool)shell_exec( 'which dot' );
-	}
+Commands:
+    --all           Process entire codebase
+    --includes      Process only files in includes/ dir
+    --languages     Process only files in languages/ dir
+    --maintenance   Process only files in maintenance/ dir
+    --skins         Process only files in skins/ dir
+    --file <file>   Process only the given file
+    --no-extensions Process everything but extensions directorys
 
-	public function execute() {
-		$this->init();
+If no command is given, you will be prompted.
 
-		# Build out directories we want to exclude
-		$exclude = '';
-		foreach ( $this->excludes as $item ) {
-			$exclude .= " $item";
-		}
+Other options:
+    --output <dir>  Set output directory (default: $doxyOutput)
+    --generate-man  Generates man page documentation
+    --version       Project version to display in the outut (default: $doxyVersion)
+    --help          Show this help and exit.
 
-		$conf = strtr( file_get_contents( $this->template ),
-			[
-				'{{OUTPUT_DIRECTORY}}' => $this->output,
-				'{{CURRENT_VERSION}}' => $this->mwVersion,
-				'{{INPUT}}' => $this->input,
-				'{{EXCLUDE}}' => $exclude,
-				'{{HAVE_DOT}}' => $this->doDot ? 'YES' : 'NO',
-				'{{INPUT_FILTER}}' => $this->inputFilter,
-			]
-		);
 
-		$tmpFile = tempnam( wfTempDir(), 'MWDocGen-' );
-		if ( file_put_contents( $tmpFile, $conf ) === false ) {
-			$this->fatalError( "Could not write doxygen configuration to file $tmpFile\n" );
-		}
-
-		$command = $this->doxygen . ' ' . $tmpFile;
-		$this->output( "Executing command:\n$command\n" );
-
-		$exitcode = 1;
-		system( $command, $exitcode );
-
-		$this->output( <<<TEXT
----------------------------------------------------
-Doxygen execution finished.
-Check above for possible errors.
-
-You might want to delete the temporary file:
- $tmpFile
----------------------------------------------------
-
-TEXT
-		);
-
-		if ( $exitcode !== 0 ) {
-			$this->fatalError( "Something went wrong (exit: $exitcode)\n", $exitcode );
+END;
+			exit(0);
+			break;
 		}
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = MWDocGen::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+// TODO : generate a list of paths ))
+
+if ( $input === '' ) {
+	echo <<<OPTIONS
+Several documentation possibilities:
+ 0 : whole documentation (1 + 2 + 3 + 4)
+ 1 : only includes
+ 2 : only languages
+ 3 : only maintenance
+ 4 : only skins
+ 5 : only a given file
+ 6 : all but the extensions directory
+OPTIONS;
+	while ( !is_numeric( $input ) )
+	{
+		$input = readaline( "\nEnter your choice [0]:" );
+		if ( $input == '' ) {
+			$input = 0;
+		}
+	}
+}
+
+switch ( $input ) {
+case 0: $input = $mwPath;  break;
+case 1: $input = $mwPathI; break;
+case 2: $input = $mwPathL; break;
+case 3: $input = $mwPathM; break;
+case 4: $input = $mwPathS; break;
+case 5:
+	if ( !isset( $file ) ) {
+		$file = readaline( "Enter file name $mwPath" );
+	}
+	$input = $mwPath . $file;
+case 6:
+	$input = $mwPath;
+	$exclude_patterns = 'extensions';
+}
+
+// Generate path exclusions
+$excludedPaths = $mwPath . join( " $mwPath", $mwExcludePaths );
+print "EXCLUDE: $excludedPaths\n\n";
+
+$generatedConf = generateConfigFile( $doxygenTemplate, $doxyOutput, $mwPath, $doxyVersion, $input, $excludedPaths, $exclude_patterns );
+$command = $doxygenBin . ' ' . $generatedConf;
+
+echo <<<TEXT
+---------------------------------------------------
+Launching the command:
+
+$command
+
+---------------------------------------------------
+
+TEXT;
+
+passthru( $command );
+
+echo <<<TEXT
+---------------------------------------------------
+Doxygen execution finished.
+Check above for possible errors.
+
+You might want to delete the temporary file $generatedConf
+
+TEXT;

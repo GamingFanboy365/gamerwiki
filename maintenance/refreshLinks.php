@@ -1,322 +1,250 @@
 <?php
 /**
- * @license GPL-2.0-or-later
- * @file
- */
-
-use MediaWiki\Deferred\DeferredUpdates;
-use MediaWiki\Deferred\LinksUpdate\CategoryLinksTable;
-use MediaWiki\Deferred\LinksUpdate\ExternalLinksTable;
-use MediaWiki\Deferred\LinksUpdate\ImageLinksTable;
-use MediaWiki\Deferred\LinksUpdate\InterwikiLinksTable;
-use MediaWiki\Deferred\LinksUpdate\LangLinksTable;
-use MediaWiki\Deferred\LinksUpdate\PageLinksTable;
-use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
-use MediaWiki\Linker\LinkTarget;
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\MediaWikiServices;
-use MediaWiki\Revision\RevisionRecord;
-use MediaWiki\Title\Title;
-use Wikimedia\Rdbms\IExpression;
-use Wikimedia\Rdbms\IReadableDatabase;
-use Wikimedia\Rdbms\RawSQLExpression;
-use Wikimedia\Rdbms\SelectQueryBuilder;
-
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
  * Refresh link tables.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
  *
  * @ingroup Maintenance
  */
-class RefreshLinks extends Maintenance {
-	private const REPORTING_INTERVAL = 100;
 
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
+
+class RefreshLinks extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Refresh link tables' );
-		$this->addOption( 'verbose', 'Output information about link refresh progress', false, false, 'v' );
+		$this->mDescription = "Refresh link tables";
 		$this->addOption( 'dfn-only', 'Delete links from nonexistent articles only' );
 		$this->addOption( 'new-only', 'Only affect articles with just a single edit' );
 		$this->addOption( 'redirects-only', 'Only fix redirects, not all links' );
-		$this->addOption( 'touched-only', 'Only fix pages that have been touched after last update' );
+		$this->addOption( 'old-redirects-only', 'Only fix redirects with no redirect table entry' );
+		$this->addOption( 'm', 'Maximum replication lag', false, true );
 		$this->addOption( 'e', 'Last page id to refresh', false, true );
-		$this->addOption( 'dfn-chunk-size', 'Maximum number of existent IDs to check per ' .
-			'query, default 100,000', false, true );
-		$this->addOption( 'namespace', 'Only fix pages in this namespace', false, true );
-		$this->addOption( 'category', 'Only fix pages in this category', false, true );
-		$this->addOption( 'tracking-category', 'Only fix pages in this tracking category', false, true );
-		$this->addOption( 'before-timestamp', 'Only fix pages that were last updated before this timestamp',
-			false, true );
 		$this->addArg( 'start', 'Page_id to start from, default 1', false );
 		$this->setBatchSize( 100 );
 	}
 
 	public function execute() {
-		// Note that there is a difference between not specifying the start
-		// and end IDs and using the minimum and maximum values from the page
-		// table. In the latter case, deleteLinksFromNonexistent() will not
-		// delete entries for nonexistent IDs that fall outside the range.
-		$start = (int)$this->getArg( 0 ) ?: null;
-		$end = (int)$this->getOption( 'e' ) ?: null;
-		$dfnChunkSize = (int)$this->getOption( 'dfn-chunk-size', 100_000 );
-
-		if ( $this->hasOption( 'dfn-only' ) ) {
-			$this->deleteLinksFromNonexistent( $start, $end, $this->getBatchSize(), $dfnChunkSize );
-			return;
+		$max = $this->getOption( 'm', 0 );
+		if ( !$this->hasOption( 'dfn-only' ) ) {
+			$start = $this->getArg( 0, 1 );
+			$new = $this->getOption( 'new-only', false );
+			$end = $this->getOption( 'e', 0 );
+			$redir = $this->getOption( 'redirects-only', false );
+			$oldRedir = $this->getOption( 'old-redirects-only', false );
+			$this->doRefreshLinks( $start, $new, $max, $end, $redir, $oldRedir );
 		}
-
-		$dbr = $this->getAnalyticsReplica();
-		$builder = $dbr->newSelectQueryBuilder()
-			->from( 'page' )
-			->where( self::intervalCond( $dbr, 'page_id', $start, $end ) )
-			->limit( $this->getBatchSize() );
-
-		if ( $this->hasOption( 'namespace' ) ) {
-			$builder->andWhere( [ 'page_namespace' => (int)$this->getOption( 'namespace' ) ] );
-		}
-
-		if ( $this->hasOption( 'before-timestamp' ) ) {
-			$builder->andWhere(
-				$dbr->expr( 'page_links_updated', '<', $this->getOption( 'before-timestamp' ) )
-					->or( 'page_links_updated', '=', null )
-			);
-		}
-
-		if ( $this->hasOption( 'category' ) ) {
-			$category = $this->getOption( 'category' );
-			$title = Title::makeTitleSafe( NS_CATEGORY, $category );
-			if ( !$title ) {
-				$this->fatalError( "'$category' is an invalid category name!\n" );
-			}
-			$this->refreshCategory( $builder, $title );
-		} elseif ( $this->hasOption( 'tracking-category' ) ) {
-			// See TrackingCategories::CORE_TRACKING_CATEGORIES for tracking category keys defined by core
-			$this->refreshTrackingCategory( $builder, $this->getOption( 'tracking-category' ) );
-		} else {
-			$new = $this->hasOption( 'new-only' );
-			$redir = $this->hasOption( 'redirects-only' );
-			$touched = $this->hasOption( 'touched-only' );
-			$what = $redir ? 'redirects' : 'links';
-			if ( $new ) {
-				$builder->andWhere( [ 'page_is_new' => 1 ] );
-				$this->output( "Refreshing $what from new pages...\n" );
-			} else {
-				if ( $touched ) {
-					$builder->andWhere( [
-						$dbr->expr( 'page_links_updated', '=', null )
-							->orExpr( new RawSQLExpression( 'page_touched > page_links_updated' ) ),
-					] );
-				}
-				$this->output( "Refreshing $what from pages...\n" );
-			}
-			$this->doRefreshLinks( $builder, $redir );
-			if ( !$this->hasOption( 'namespace' ) ) {
-				$this->deleteLinksFromNonexistent( $start, $end, $this->getBatchSize(), $dfnChunkSize );
-			}
-		}
+		$this->deleteLinksFromNonexistent( $max, $this->mBatchSize );
 	}
 
 	/**
 	 * Do the actual link refreshing.
-	 * @param SelectQueryBuilder $builder
-	 * @param bool $redirectsOnly Only fix redirects
-	 * @param array $indexFields
+	 * @param $start int Page_id to start from
+	 * @param $newOnly bool Only do pages with 1 edit
+	 * @param $maxLag int Max DB replication lag
+	 * @param $end int Page_id to stop at
+	 * @param $redirectsOnly bool Only fix redirects
+	 * @param $oldRedirectsOnly bool Only fix redirects without redirect entries
 	 */
-	private function doRefreshLinks(
-		SelectQueryBuilder $builder,
-		bool $redirectsOnly = false,
-		array $indexFields = [ 'page_id' ]
-	) {
+	private function doRefreshLinks( $start, $newOnly = false, $maxLag = false,
+						$end = 0, $redirectsOnly = false, $oldRedirectsOnly = false ) {
+		global $wgParser, $wgUseTidy;
+
+		$reportingInterval = 100;
+		$dbr = wfGetDB( DB_SLAVE );
+		$start = intval( $start );
+
 		// Give extensions a chance to optimize settings
-		$this->getHookRunner()->onMaintenanceRefreshLinksInit( $this );
+		wfRunHooks( 'MaintenanceRefreshLinksInit', array( $this ) );
 
-		$estimateCount = $builder->caller( __METHOD__ )->estimateRowCount();
-		$this->output( "Estimated page count: $estimateCount\n" );
+		# Don't generate extension images (e.g. Timeline)
+		$wgParser->clearTagHooks();
 
-		$i = 0;
-		$lastIndexes = array_fill_keys( $indexFields, 0 );
-		$selectFields = in_array( 'page_id', $indexFields )
-			? $indexFields : [ 'page_id', ...$indexFields ];
-		$verbose = $this->hasOption( 'verbose' );
-		$dbr = $this->getAnalyticsReplica();
-		do {
-			$batchCond = $dbr->buildComparison( '>', $lastIndexes );
-			$res = ( clone $builder )->select( $selectFields )
-				->andWhere( [ $batchCond ] )
-				->orderBy( $indexFields )
-				->caller( __METHOD__ )->fetchResultSet();
+		# Don't use HTML tidy
+		$wgUseTidy = false;
 
-			if ( $verbose ) {
-				$this->output( "Refreshing links for {$res->numRows()} pages\n" );
+		$what = $redirectsOnly ? "redirects" : "links";
+
+		if ( $oldRedirectsOnly ) {
+			# This entire code path is cut-and-pasted from below.  Hurrah.
+
+			$conds = array(
+				"page_is_redirect=1",
+				"rd_from IS NULL"
+			);
+
+			if ( $end == 0 ) {
+				$conds[] = "page_id >= $start";
+			} else {
+				$conds[] = "page_id BETWEEN $start AND $end";
 			}
 
+			$res = $dbr->select(
+				array( 'page', 'redirect' ),
+				'page_id',
+				$conds,
+				__METHOD__,
+				array(),
+				array( 'redirect' => array( "LEFT JOIN", "page_id=rd_from" ) )
+			);
+			$num = $dbr->numRows( $res );
+			$this->output( "Refreshing $num old redirects from $start...\n" );
+
+			$i = 0;
+
 			foreach ( $res as $row ) {
-				if ( !( ++$i % self::REPORTING_INTERVAL ) ) {
+				if ( !( ++$i % $reportingInterval ) ) {
 					$this->output( "$i\n" );
-					$this->waitForReplication();
+					wfWaitForSlaves();
 				}
-				if ( $verbose ) {
-					$this->output( "Refreshing links for page ID {$row->page_id}\n" );
+				$this->fixRedirect( $row->page_id );
+			}
+		} elseif ( $newOnly ) {
+			$this->output( "Refreshing $what from " );
+			$res = $dbr->select( 'page',
+				array( 'page_id' ),
+				array(
+					'page_is_new' => 1,
+					"page_id >= $start" ),
+				__METHOD__
+			);
+			$num = $dbr->numRows( $res );
+			$this->output( "$num new articles...\n" );
+
+			$i = 0;
+			foreach ( $res as $row ) {
+				if ( !( ++$i % $reportingInterval ) ) {
+					$this->output( "$i\n" );
+					wfWaitForSlaves();
 				}
-				self::fixRedirect( $this, $row->page_id );
-				if ( !$redirectsOnly ) {
+				if ( $redirectsOnly ) {
+					$this->fixRedirect( $row->page_id );
+				} else {
 					self::fixLinksFromArticle( $row->page_id );
 				}
 			}
-			if ( $res->numRows() ) {
-				$res->seek( $res->numRows() - 1 );
-				foreach ( $indexFields as $field ) {
-					$lastIndexes[$field] = $res->current()->$field;
+		} else {
+			if ( !$end ) {
+				$maxPage = $dbr->selectField( 'page', 'max(page_id)', false );
+				$maxRD = $dbr->selectField( 'redirect', 'max(rd_from)', false );
+				$end = max( $maxPage, $maxRD );
+			}
+			$this->output( "Refreshing redirects table.\n" );
+			$this->output( "Starting from page_id $start of $end.\n" );
+
+			for ( $id = $start; $id <= $end; $id++ ) {
+
+				if ( !( $id % $reportingInterval ) ) {
+					$this->output( "$id\n" );
+					wfWaitForSlaves();
 				}
+				$this->fixRedirect( $id );
 			}
 
-		} while ( $res->numRows() == $this->getBatchSize() );
+			if ( !$redirectsOnly ) {
+				$this->output( "Refreshing links table.\n" );
+				$this->output( "Starting from page_id $start of $end.\n" );
+
+				for ( $id = $start; $id <= $end; $id++ ) {
+
+					if ( !( $id % $reportingInterval ) ) {
+						$this->output( "$id\n" );
+						wfWaitForSlaves();
+					}
+					self::fixLinksFromArticle( $id );
+				}
+			}
+		}
 	}
 
 	/**
-	 * Update the redirect entry for a given page.
-	 *
-	 * This methods bypasses the "redirect" table to get the redirect target,
-	 * and parses the page's content to fetch it. This allows to be sure that
-	 * the redirect target is up to date and valid.
-	 * This is particularly useful when modifying namespaces to be sure the
-	 * entry in the "redirect" table points to the correct page and not to an
-	 * invalid one.
-	 *
-	 * @internal
-	 * @param Maintenance $maint
-	 * @param int $id The page ID to check
+	 * Update the redirect entry for a given page
+	 * @param $id int The page_id of the redirect
 	 */
-	public static function fixRedirect( Maintenance $maint, $id ) {
-		$page = $maint->getServiceContainer()->getWikiPageFactory()->newFromID( $id );
+	private function fixRedirect( $id ) {
+		$title = Title::newFromID( $id );
+		$dbw = wfGetDB( DB_MASTER );
 
-		// In case the page just got deleted.
-		if ( $page === null ) {
+		if ( is_null( $title ) ) {
+			// This page doesn't exist (any more)
+			// Delete any redirect table entry for it
+			$dbw->delete( 'redirect', array( 'rd_from' => $id ),
+				__METHOD__ );
 			return;
 		}
 
-		$rt = null;
-		$content = $page->getContent( RevisionRecord::RAW );
-		if ( $content !== null ) {
-			$rt = $content->getRedirectTarget();
-		}
+		$page = WikiPage::factory( $title );
+		$rt = $page->getRedirectTarget();
 
-		$dbw = $maint->getPrimaryDB();
 		if ( $rt === null ) {
-			// The page is not a redirect
+			// $title is not a redirect
 			// Delete any redirect table entry for it
-			$dbw->newDeleteQueryBuilder()
-				->deleteFrom( 'redirect' )
-				->where( [ 'rd_from' => $id ] )
-				->caller( __METHOD__ )->execute();
-			$fieldValue = 0;
-		} else {
-			$maint->getServiceContainer()->getRedirectStore()->updateRedirectTarget( $page, $rt );
-			$fieldValue = 1;
+			$dbw->delete( 'redirect', array( 'rd_from' => $id ),
+				__METHOD__ );
 		}
-
-		// Update the page table to be sure it is an a consistent state
-		$update = $dbw->newUpdateQueryBuilder()
-			->update( 'page' )
-			->set( [ 'page_is_redirect' => $fieldValue ] )
-			->where( [ 'page_id' => $id ] )
-			->caller( __METHOD__ );
-		$update->execute();
-		$maint->getServiceContainer()->getLinkWriteDuplicator()->duplicate( $update );
 	}
 
 	/**
 	 * Run LinksUpdate for all links on a given page_id
-	 * @param int $id The page_id
-	 * @param string|false|null $freshness forces an update if the
-	 *     last update was before the given timestamp, even if the
-	 *     page and its dependencies didn't change since then.  If `null`
-	 *     (the default) uses the current time.  Set to `false` to update
-	 *     only pages which have changed since their last update.
-	 * @see DerivedPageDataUpdater::doSecondaryDataUpdates()
+	 * @param $id int The page_id
 	 */
-	public static function fixLinksFromArticle( $id, $freshness = null ) {
-		$services = MediaWikiServices::getInstance();
-		$page = $services->getWikiPageFactory()->newFromID( $id );
+	public static function fixLinksFromArticle( $id ) {
+		global $wgParser;
 
-		// In case the page just got deleted.
-		if ( $page === null ) {
+		$title = Title::newFromID( $id );
+		$dbw = wfGetDB( DB_MASTER );
+
+		LinkCache::singleton()->clear();
+
+		if ( is_null( $title ) ) {
 			return;
 		}
 
-		// Defer updates to post-send but then immediately execute deferred updates;
-		// this is the simplest way to run all updates immediately (including updates
-		// scheduled by other updates).
-		$page->doSecondaryDataUpdates( [
-			'defer' => DeferredUpdates::POSTSEND,
-			'causeAction' => 'refresh-links-maintenance',
-			'recursive' => false,
-			'freshness' => $freshness ?? wfTimestampNow(),
-		] );
-		DeferredUpdates::doUpdates();
+		$revision = Revision::newFromTitle( $title );
+		if ( !$revision ) {
+			return;
+		}
+
+		$dbw->begin();
+
+		$options = new ParserOptions;
+		$parserOutput = $wgParser->parse( $revision->getText(), $title, $options, true, true, $revision->getId() );
+		$update = new LinksUpdate( $title, $parserOutput, false );
+		$update->doUpdate();
+		$dbw->commit();
 	}
 
 	/**
 	 * Removes non-existing links from pages from pagelinks, imagelinks,
 	 * categorylinks, templatelinks, externallinks, interwikilinks, langlinks and redirect tables.
 	 *
-	 * @param int|null $start Page_id to start from
-	 * @param int|null $end Page_id to stop at
-	 * @param int $batchSize The size of deletion batches
-	 * @param int $chunkSize Maximum number of existent IDs to check per query
+	 * @param $maxLag
+	 * @param $batchSize The size of deletion batches
 	 *
 	 * @author Merlijn van Deen <valhallasw@arctus.nl>
 	 */
-	private function deleteLinksFromNonexistent( $start = null, $end = null, $batchSize = 100,
-		$chunkSize = 100_000
-	) {
-		$this->waitForReplication();
-		$this->output( "Deleting illegal entries from the links tables...\n" );
-		$dbr = $this->getAnalyticsReplica();
-		do {
-			// Find the start of the next chunk. This is based only
-			// on existent page_ids.
-			$nextStart = $dbr->newSelectQueryBuilder()
-				->select( 'page_id' )
-				->from( 'page' )
-				->where( [ self::intervalCond( $dbr, 'page_id', $start, $end ) ] )
-				->orderBy( 'page_id' )
-				->offset( $chunkSize )
-				->caller( __METHOD__ )->fetchField();
+	private function deleteLinksFromNonexistent( $maxLag = 0, $batchSize = 100 ) {
+		wfWaitForSlaves();
 
-			if ( $nextStart !== false ) {
-				// To find the end of the current chunk, subtract one.
-				// This will serve to limit the number of rows scanned in
-				// dfnCheckInterval(), per query, to at most the sum of
-				// the chunk size and deletion batch size.
-				$chunkEnd = $nextStart - 1;
-			} else {
-				// This is the last chunk. Check all page_ids up to $end.
-				$chunkEnd = $end;
-			}
+		$dbw = wfGetDB( DB_MASTER );
 
-			$fmtStart = $start !== null ? "[$start" : '(-INF';
-			$fmtChunkEnd = $chunkEnd !== null ? "$chunkEnd]" : 'INF)';
-			$this->output( "  Checking interval $fmtStart, $fmtChunkEnd\n" );
-			$this->dfnCheckInterval( $start, $chunkEnd, $batchSize );
+		$lb = wfGetLBFactory()->newMainLB();
+		$dbr = $lb->getConnection( DB_SLAVE );
+		$dbr->bufferResults( false );
 
-			$start = $nextStart;
-
-		} while ( $nextStart !== false );
-	}
-
-	/**
-	 * @see RefreshLinks::deleteLinksFromNonexistent()
-	 * @param int|null $start Page_id to start from
-	 * @param int|null $end Page_id to stop at
-	 * @param int $batchSize The size of deletion batches
-	 */
-	private function dfnCheckInterval( $start = null, $end = null, $batchSize = 100 ) {
-		$linksTables = [
-			// table name => page_id field
+		$linksTables = array( // table name => page_id field
 			'pagelinks' => 'pl_from',
 			'imagelinks' => 'il_from',
 			'categorylinks' => 'cl_from',
@@ -326,130 +254,43 @@ class RefreshLinks extends Maintenance {
 			'langlinks' => 'll_from',
 			'redirect' => 'rd_from',
 			'page_props' => 'pp_page',
-		];
-
-		$domains = [
-			'categorylinks' => CategoryLinksTable::VIRTUAL_DOMAIN,
-			'externallinks' => ExternalLinksTable::VIRTUAL_DOMAIN,
-			'imagelinks' => ImageLinksTable::VIRTUAL_DOMAIN,
-			'iwlinks' => InterwikiLinksTable::VIRTUAL_DOMAIN,
-			'langlinks' => LangLinksTable::VIRTUAL_DOMAIN,
-			'pagelinks' => PageLinksTable::VIRTUAL_DOMAIN,
-			'templatelinks' => TemplateLinksTable::VIRTUAL_DOMAIN,
-		];
+		);
 
 		foreach ( $linksTables as $table => $field ) {
-			$domain = $domains[$table] ?? false;
-			$dbw = $this->getPrimaryDB( $domain );
-			$dbr = $this->getAnalyticsReplica( $domain );
+			$this->output( "Retrieving illegal entries from $table... " );
 
-			$this->output( "    $table: 0" );
-			$tableStart = $start;
+			// SELECT DISTINCT( $field ) FROM $table LEFT JOIN page ON $field=page_id WHERE page_id IS NULL;
+			$results = $dbr->select( array( $table, 'page' ),
+						  $field,
+						  array( 'page_id' => null ),
+						  __METHOD__,
+						  'DISTINCT',
+						  array( 'page' => array( 'LEFT JOIN', "$field=page_id" ) )
+			);
+
 			$counter = 0;
-			do {
-				$ids = $dbr->newSelectQueryBuilder()
-					->select( $field )
-					->distinct()
-					->from( $table )
-					->leftJoin( 'page', null, "$field = page_id" )
-					->where( self::intervalCond( $dbr, $field, $tableStart, $end ) )
-					->andWhere( [ 'page_id' => null ] )
-					->orderBy( $field )
-					->limit( $batchSize )
-					->caller( __METHOD__ )->fetchFieldValues();
+			$list = array();
+			$this->output( "0.." );
+			foreach ( $results as $row ) {
+				$counter++;
+				$list[] = $row->$field;
+				if ( ( $counter % $batchSize ) == 0 ) {
+					wfWaitForSlaves();
+					$dbw->delete( $table, array( $field => $list ), __METHOD__ );
 
-				$numIds = count( $ids );
-				if ( $numIds ) {
-					$counter += $numIds;
-					$dbw->newDeleteQueryBuilder()
-						->deleteFrom( $table )
-						->where( [ $field => $ids ] )
-						->caller( __METHOD__ )->execute();
-					$this->output( ", $counter" );
-					$tableStart = $ids[$numIds - 1] + 1;
-					$this->waitForReplication();
+					$this->output( $counter . ".." );
+					$list = array();
 				}
-
-			} while ( $numIds >= $batchSize && ( $end === null || $tableStart <= $end ) );
-
-			$this->output( " deleted.\n" );
+			}
+			$this->output( $counter );
+			if ( count( $list ) > 0 ) {
+				$dbw->delete( $table, array( $field => $list ), __METHOD__ );
+			}
+			$this->output( "\n" );
 		}
-	}
-
-	/**
-	 * Build a SQL expression for a closed interval.
-	 *
-	 * By specifying a null $start or $end, it is also possible to create
-	 * half-bounded or unbounded intervals using this function.
-	 *
-	 * @param IReadableDatabase $db
-	 * @param string $var Field name
-	 * @param mixed $start First value to include or null
-	 * @param mixed $end Last value to include or null
-	 * @return IExpression
-	 */
-	private static function intervalCond( IReadableDatabase $db, $var, $start, $end ) {
-		if ( $start === null && $end === null ) {
-			return $db->expr( $var, '!=', null );
-		} elseif ( $end === null ) {
-			return $db->expr( $var, '>=', $start );
-		} elseif ( $start === null ) {
-			return $db->expr( $var, '<=', $end );
-		} else {
-			return $db->expr( $var, '>=', $start )->and( $var, '<=', $end );
-		}
-	}
-
-	/**
-	 * Refershes links for pages in a tracking category
-	 *
-	 * @param SelectQueryBuilder $builder
-	 * @param string $category Category key
-	 */
-	private function refreshTrackingCategory( SelectQueryBuilder $builder, $category ) {
-		$cats = $this->getPossibleCategories( $category );
-
-		if ( !$cats ) {
-			$this->error( "Tracking category '$category' is disabled\n" );
-			// Output to stderr but don't bail out.
-		}
-
-		foreach ( $cats as $cat ) {
-			$this->refreshCategory( clone $builder, $cat );
-		}
-	}
-
-	/**
-	 * Refreshes links to a category
-	 *
-	 * @param SelectQueryBuilder $builder
-	 * @param LinkTarget $category
-	 */
-	private function refreshCategory( SelectQueryBuilder $builder, LinkTarget $category ) {
-		$this->output( "Refreshing pages in category '{$category->getText()}'...\n" );
-
-		$builder->join( 'categorylinks', null, 'page_id=cl_from' )
-			->join( 'linktarget', null, 'lt_id=cl_target_id' )
-			->andWhere( [ 'lt_title' => $category->getDBkey(), 'lt_namespace' => NS_CATEGORY ] );
-		$this->doRefreshLinks( $builder, false, [ 'cl_timestamp', 'cl_from' ] );
-	}
-
-	/**
-	 * Returns a list of possible categories for a given tracking category key
-	 *
-	 * @param string $categoryKey
-	 * @return LinkTarget[]
-	 */
-	private function getPossibleCategories( $categoryKey ) {
-		$cats = $this->getServiceContainer()->getTrackingCategories()->getTrackingCategories();
-		if ( isset( $cats[$categoryKey] ) ) {
-			return $cats[$categoryKey]['cats'];
-		}
-		$this->fatalError( "Unknown tracking category {$categoryKey}\n" );
+		$lb->closeAll();
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = RefreshLinks::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = 'RefreshLinks';
+require_once( RUN_MAINTENANCE_IF_MAIN );

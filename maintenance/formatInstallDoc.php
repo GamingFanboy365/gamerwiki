@@ -1,40 +1,25 @@
 <?php
 /**
- * Format RELEASE-NOTE file to wiki text or HTML markup.
- *
- * @license GPL-2.0-or-later
- * @file
  * @ingroup Maintenance
  */
 
-use MediaWiki\Installer\InstallDocFormatter;
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Parser\ParserOptions;
-use MediaWiki\Title\Title;
+require_once( dirname( __FILE__ ) .'/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that formats RELEASE-NOTE file to wiki text or HTML markup.
- *
- * @ingroup Maintenance
- */
-class FormatInstallDoc extends Maintenance {
-	public function __construct() {
+class MaintenanceFormatInstallDoc extends Maintenance {
+	function __construct() {
 		parent::__construct();
 		$this->addArg( 'path', 'The file name to format', false );
 		$this->addOption( 'outfile', 'The output file name', false, true );
 		$this->addOption( 'html', 'Use HTML output format. By default, wikitext is used.' );
 	}
 
-	public function execute() {
+	function execute() {
 		if ( $this->hasArg( 0 ) ) {
 			$fileName = $this->getArg( 0 );
 			$inFile = fopen( $fileName, 'r' );
 			if ( !$inFile ) {
-				$this->fatalError( "Unable to open input file \"$fileName\"" );
+				$this->error( "Unable to open input file \"$fileName\"" );
+				exit( 1 );
 			}
 		} else {
 			$inFile = STDIN;
@@ -44,7 +29,8 @@ class FormatInstallDoc extends Maintenance {
 			$fileName = $this->getOption( 'outfile' );
 			$outFile = fopen( $fileName, 'w' );
 			if ( !$outFile ) {
-				$this->fatalError( "Unable to open output file \"$fileName\"" );
+				$this->error( "Unable to open output file \"$fileName\"" );
+				exit( 1 );
 			}
 		} else {
 			$outFile = STDOUT;
@@ -54,23 +40,18 @@ class FormatInstallDoc extends Maintenance {
 		$outText = InstallDocFormatter::format( $inText );
 
 		if ( $this->hasOption( 'html' ) ) {
-			$parser = $this->getServiceContainer()->getParser();
-			$opt = ParserOptions::newFromAnon();
+			global $wgParser;
+			$opt = new ParserOptions;
 			$title = Title::newFromText( 'Text file' );
-			$out = $parser->parse( $outText, $title, $opt );
-			$outText = "<html><body>\n" .
-				// TODO T371008 consider if using the Content framework makes sense instead of creating the pipeline
-				$this->getServiceContainer()->getDefaultOutputPipeline()
-					->run( $out, $opt, [] )
-					->getContentHolderText()
-				. "\n</body></html>\n";
+			$out = $wgParser->parse( $outText, $title, $opt );
+			$outText = "<html><body>\n" . $out->getText() . "\n</body></html>\n";
 		}
 
 		fwrite( $outFile, $outText );
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = FormatInstallDoc::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = 'MaintenanceFormatInstallDoc';
+require_once( RUN_MAINTENANCE_IF_MAIN );
+
+

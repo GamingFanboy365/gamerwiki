@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Remove pages with only 1 revision from the MediaWiki namespace, without
  * flooding recent changes, delete logs, etc.
@@ -12,30 +13,32 @@
  * back up your DB if there's anything in the MediaWiki that is important to
  * you.
  *
- * @license GPL-2.0-or-later
- * @file
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @ingroup Maintenance
  * @author Steve Sanbeg
  * based on nukePage by Rob Church
  */
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Title\Title;
-
-/**
- * Maintenance script that removes pages with only one revision from the
- * MediaWiki namespace.
- *
- * @ingroup Maintenance
- */
 class NukeNS extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Remove pages with only 1 revision from any namespace' );
+		$this->mDescription = "Remove pages with only 1 revision from any namespace";
 		$this->addOption( 'delete', "Actually delete the page" );
 		$this->addOption( 'ns', 'Namespace to delete from, default NS_MEDIAWIKI', false, true );
 		$this->addOption( 'all', 'Delete everything regardless of revision count' );
@@ -43,30 +46,29 @@ class NukeNS extends Maintenance {
 
 	public function execute() {
 		$ns = $this->getOption( 'ns', NS_MEDIAWIKI );
-		$delete = $this->hasOption( 'delete' );
-		$all = $this->hasOption( 'all' );
-		$dbw = $this->getPrimaryDB();
-		$this->beginTransactionRound( __METHOD__ );
+		$delete = $this->getOption( 'delete', false );
+		$all = $this->getOption( 'all', false );
+		$dbw = wfGetDB( DB_MASTER );
+		$dbw->begin();
 
-		$res = $dbw->newSelectQueryBuilder()
-			->select( 'page_title' )
-			->from( 'page' )
-			->where( [ 'page_namespace' => $ns ] )
-			->caller( __METHOD__ )->fetchResultSet();
+		$tbl_pag = $dbw->tableName( 'page' );
+		$tbl_rev = $dbw->tableName( 'revision' );
+		$res = $dbw->query( "SELECT page_title FROM $tbl_pag WHERE page_namespace = $ns" );
 
 		$n_deleted = 0;
 
 		foreach ( $res as $row ) {
 			// echo "$ns_name:".$row->page_title, "\n";
 			$title = Title::makeTitle( $ns, $row->page_title );
-			$id = $title->getArticleID();
+			$id   = $title->getArticleID();
 
 			// Get corresponding revisions
-			$revs = $dbw->newSelectQueryBuilder()
-				->select( 'rev_id' )
-				->from( 'revision' )
-				->where( [ 'rev_page' => $id ] )
-				->caller( __METHOD__ )->fetchFieldValues();
+			$res2 = $dbw->query( "SELECT rev_id FROM $tbl_rev WHERE rev_page = $id" );
+			$revs = array();
+
+			foreach ( $res2 as $row2 ) {
+				$revs[] = $row2->rev_id;
+			}
 			$count = count( $revs );
 
 			// skip anything that looks modified (i.e. multiple revs)
@@ -77,42 +79,31 @@ class NukeNS extends Maintenance {
 				// as much as I hate to cut & paste this, it's a little different, and
 				// I already have the id & revs
 				if ( $delete ) {
-					$deleteQueryBuilder = $dbw->newDeleteQueryBuilder()
-						->deleteFrom( 'page' )
-						->where( [ 'page_id' => $id ] )
-						->caller( __METHOD__ );
-					$deleteQueryBuilder->execute();
-					$this->getServiceContainer()->getLinkWriteDuplicator()->duplicate( $deleteQueryBuilder );
-					$this->commitTransactionRound( __METHOD__ );
+					$dbw->query( "DELETE FROM $tbl_pag WHERE page_id = $id" );
+					$dbw->commit();
 					// Delete revisions as appropriate
-					/** @var NukePage $child */
-					$child = $this->createChild( NukePage::class, 'nukePage.php' );
-					'@phan-var NukePage $child';
+					$child = $this->runChild( 'NukePage', 'nukePage.php' );
 					$child->deleteRevisions( $revs );
-					$n_deleted++;
+					$this->purgeRedundantText( true );
+					$n_deleted ++;
 				}
 			} else {
-				$this->output( "skip: " . $title->getPrefixedText() . "\n" );
+			  $this->output( "skip: " . $title->getPrefixedText() . "\n" );
 			}
 		}
-		$this->commitTransactionRound( __METHOD__ );
+		$dbw->commit();
 
 		if ( $n_deleted > 0 ) {
-			$this->purgeRedundantText( true );
-
 			# update statistics - better to decrement existing count, or just count
 			# the page table?
-			$pages = $dbw->newSelectQueryBuilder()
-				->select( 'ss_total_pages' )
-				->from( 'site_stats' )
-				->caller( __METHOD__ )->fetchField();
+			$pages = $dbw->selectField( 'site_stats', 'ss_total_pages' );
 			$pages -= $n_deleted;
-			$dbw->newUpdateQueryBuilder()
-				->update( 'site_stats' )
-				->set( [ 'ss_total_pages' => $pages ] )
-				->where( [ 'ss_row_id' => 1 ] )
-				->caller( __METHOD__ )
-				->execute();
+			$dbw->update(
+				'site_stats',
+				array( 'ss_total_pages' => $pages ),
+				array( 'ss_row_id' => 1 ),
+				__METHOD__
+			);
 		}
 
 		if ( !$delete ) {
@@ -121,7 +112,5 @@ class NukeNS extends Maintenance {
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = NukeNS::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "NukeNS";
+require_once( RUN_MAINTENANCE_IF_MAIN );

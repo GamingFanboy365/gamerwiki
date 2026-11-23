@@ -1,137 +1,110 @@
 <?php
 /**
- * Run pending jobs.
+ * This script starts pending jobs.
  *
- * @license GPL-2.0-or-later
- * @file
+ * Usage:
+ *  --maxjobs <num> (default 10000)
+ *  --type <job_cmd>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @ingroup Maintenance
  */
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-use MediaWiki\Json\FormatJson;
-use MediaWiki\Maintenance\ForkController;
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Settings\SettingsBuilder;
-
-/**
- * Maintenance script that runs pending jobs.
- *
- * @ingroup Maintenance
- */
 class RunJobs extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Run pending jobs' );
+		$this->mDescription = "Run pending jobs";
 		$this->addOption( 'maxjobs', 'Maximum number of jobs to run', false, true );
 		$this->addOption( 'maxtime', 'Maximum amount of wall-clock time', false, true );
 		$this->addOption( 'type', 'Type of job to run', false, true );
 		$this->addOption( 'procs', 'Number of processes to use', false, true );
-		$this->addOption( 'nothrottle', 'Ignore job throttling configuration', false, false );
-		$this->addOption( 'result', 'Set to "json" to print only a JSON response', false, true );
-		$this->addOption( 'wait', 'Wait for new jobs instead of exiting', false, false );
 	}
 
-	public function finalSetup( SettingsBuilder $settingsBuilder ) {
-		// So extensions (and other code) can check whether they're running in job mode.
-		// This is not defined if this script is included from installer/updater or phpunit.
-		define( 'MEDIAWIKI_JOB_RUNNER', true );
-		parent::finalSetup( $settingsBuilder );
-	}
-
-	/** @inheritDoc */
 	public function memoryLimit() {
-		if ( $this->hasOption( 'memory-limit' ) ) {
-			return parent::memoryLimit();
-		}
-
 		// Don't eat all memory on the machine if we get a bad job.
-		//
-		// The default memory_limit for PHP-CLI is -1 (unlimited).
-		// This is fine for most maintenance scripts, but runJobs.php is unusually likely
-		// to leak memory (e.g. some badly-managed in-process cache array in some class)
-		// because it can run for long periods doing different tasks.
-		// Let's use 3x the limit for a web request.
-		global $wgMemoryLimit;
-		$limit = wfShorthandToInteger( (string)$wgMemoryLimit );
-		return $limit === -1 ? $limit : ( $limit * 3 );
+		return "150M";
 	}
 
 	public function execute() {
+		global $wgTitle;
 		if ( $this->hasOption( 'procs' ) ) {
 			$procs = intval( $this->getOption( 'procs' ) );
 			if ( $procs < 1 || $procs > 1000 ) {
-				$this->fatalError( "Invalid argument to --procs" );
-			} elseif ( $procs != 1 ) {
-				try {
-					$fc = new ForkController( $procs );
-				} catch ( Throwable $e ) {
-					$this->fatalError( $e->getMessage() );
-				}
-				if ( $fc->start() != 'child' ) {
-					return;
-				}
+				$this->error( "Invalid argument to --procs", true );
+			}
+			$fc = new ForkController( $procs );
+			if ( $fc->start() != 'child' ) {
+				exit( 0 );
 			}
 		}
-
-		$outputJSON = ( $this->getOption( 'result' ) === 'json' );
-		$wait = $this->hasOption( 'wait' );
-
-		$runner = $this->getServiceContainer()->getJobRunner();
-		if ( !$outputJSON ) {
-			$runner->setDebugHandler( $this->debugInternal( ... ) );
-		}
-
-		$type = $this->getOption( 'type', false );
 		$maxJobs = $this->getOption( 'maxjobs', false );
 		$maxTime = $this->getOption( 'maxtime', false );
-		$throttle = !$this->hasOption( 'nothrottle' );
+		$startTime = time();
+		$type = $this->getOption( 'type', false );
+		$wgTitle = Title::newFromText( 'RunJobs.php' );
+		$dbw = wfGetDB( DB_MASTER );
+		$n = 0;
+		$conds = '';
+		if ( $type !== false ) {
+			$conds = "job_cmd = " . $dbw->addQuotes( $type );
+		}
 
-		while ( true ) {
-			$response = $runner->run( [
-				'type'     => $type,
-				'maxJobs'  => $maxJobs,
-				'maxTime'  => $maxTime,
-				'throttle' => $throttle,
-			] );
+		while ( $dbw->selectField( 'job', 'job_id', $conds, 'runJobs.php' ) ) {
+			$offset = 0;
+			for ( ; ; ) {
+				$job = !$type ? Job::pop( $offset ) : Job::pop_type( $type );
 
-			if ( $outputJSON ) {
-				$this->output( FormatJson::encode( $response, true ) );
-			}
-
-			if (
-				!$wait ||
-				$response['reached'] === 'time-limit' ||
-				$response['reached'] === 'job-limit' ||
-				$response['reached'] === 'memory-limit' ||
-				$response['reached'] === 'exception'
-			) {
-				// If job queue is empty, output it
-				if ( !$outputJSON && $response['jobs'] === [] ) {
-					$this->output( "Job queue is empty.\n" );
+				if ( !$job ) {
+					break;
 				}
-				break;
-			}
 
-			if ( $maxJobs !== false ) {
-				$maxJobs -= count( $response['jobs'] );
-			}
+				wfWaitForSlaves();
+				$t = microtime( true );
+				$offset = $job->id;
+				$status = $job->run();
+				$t = microtime( true ) - $t;
+				$timeMs = intval( $t * 1000 );
+				if ( !$status ) {
+					$this->runJobsLog( $job->toString() . " t=$timeMs error={$job->error}" );
+				} else {
+					$this->runJobsLog( $job->toString() . " t=$timeMs good" );
+				}
 
-			sleep( 1 );
+				if ( $maxJobs && ++$n > $maxJobs ) {
+					break 2;
+				}
+				if ( $maxTime && time() - $startTime > $maxTime ) {
+					break 2;
+				}
+			}
 		}
 	}
 
 	/**
-	 * @param string $s
+	 * Log the job message
+	 * @param $msg String The message to log
 	 */
-	private function debugInternal( $s ) {
-		$this->output( $s );
+	private function runJobsLog( $msg ) {
+		$this->output( wfTimestamp( TS_DB ) . " $msg\n" );
+		wfDebugLog( 'runJobs', $msg );
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = RunJobs::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "RunJobs";
+require_once( RUN_MAINTENANCE_IF_MAIN );

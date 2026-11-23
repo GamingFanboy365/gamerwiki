@@ -1,11 +1,13 @@
 <?php
 /** Kazakh (China) (‫قازاقشا (جۇنگو)‬)
  *
+ * See MessagesQqq.php for message documentation incl. usage of parameters
+ * To improve a translation please visit http://translatewiki.net
+ *
+ * @ingroup Language
  * @file
- * @ingroup Languages
+ *
  */
 
-$rtl = true;
-
 # Inherit everything for now
-$fallback = 'kk-arab, kk, kk-cyrl';
+$fallback = 'kk-arab, kk-cyrl';

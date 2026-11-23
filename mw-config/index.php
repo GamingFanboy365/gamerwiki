@@ -2,46 +2,27 @@
 /**
  * New version of MediaWiki web-based config/installation
  *
- * @license GPL-2.0-or-later
  * @file
  */
 
-use MediaWiki\Context\RequestContext;
-use MediaWiki\Installer\Installer;
-use MediaWiki\Installer\InstallerOverrides;
-use MediaWiki\MediaWikiServices;
-use MediaWiki\PHPVersionCheck;
-
-// Bail on old versions of PHP, or if composer has not been run yet to install
-// dependencies.
-require_once __DIR__ . '/../includes/PHPVersionCheck.php';
-( new PHPVersionCheck( 'html', dirname( dirname( $_SERVER['SCRIPT_NAME'] ) ) ) )->run();
-
-define( 'MW_CONFIG_CALLBACK', [ Installer::class, 'overrideConfig' ] );
+define( 'MW_CONFIG_CALLBACK', 'Installer::overrideConfig' );
 define( 'MEDIAWIKI_INSTALL', true );
 
-// Resolve relative to regular MediaWiki root
-// instead of mw-config subdirectory.
-chdir( dirname( __DIR__ ) );
-require dirname( __DIR__ ) . '/includes/WebStart.php';
+chdir( dirname( dirname( __FILE__ ) ) );
+if ( isset( $_SERVER['MW_COMPILED'] ) ) {
+	require ( 'phase3/includes/WebStart.php' );
+} else {
+	require( dirname( dirname( __FILE__ ) ) . '/includes/WebStart.php' );
+}
 
 wfInstallerMain();
 
 function wfInstallerMain() {
-	global $wgMetaNamespace, $wgCanonicalNamespaceNames;
-	$request = RequestContext::getMain()->getRequest();
+	global $wgRequest, $wgLang, $wgMetaNamespace, $wgCanonicalNamespaceNames;
 
-	$installer = InstallerOverrides::getWebInstaller( $request );
+	$installer = new WebInstaller( $wgRequest );
 
 	if ( !$installer->startSession() ) {
-		if ( $installer->request->getCheck( 'css' ) ) {
-			// Do not display errors on css pages
-			$installer->outputCss();
-			exit;
-		}
-
-		$errors = $installer->getPhpErrors();
-		$installer->showError( 'config-session-error', $errors[0] );
 		$installer->finish();
 		exit;
 	}
@@ -50,31 +31,24 @@ function wfInstallerMain() {
 	if ( isset( $_SESSION['installData'][$fingerprint] ) ) {
 		$session = $_SESSION['installData'][$fingerprint];
 	} else {
-		$session = [];
+		$session = array();
 	}
 
-	$services = MediaWikiServices::getInstance();
-	$languageFactory = $services->getLanguageFactory();
-	$languageNameUtils = $services->getLanguageNameUtils();
-
-	$langCode = 'en';
-	if ( isset( $session['settings']['_UserLang'] ) &&
-		$languageNameUtils->isKnownLanguageTag( $session['settings']['_UserLang'] )
-	) {
+	if ( !is_null( $wgRequest->getVal( 'uselang' ) ) ) {
+		$langCode = $wgRequest->getVal( 'uselang' );
+	} elseif ( isset( $session['settings']['_UserLang'] ) ) {
 		$langCode = $session['settings']['_UserLang'];
+	} else {
+		$langCode = 'en';
 	}
-	$uselang = $request->getRawVal( 'uselang' );
-	if ( $uselang !== null && $languageNameUtils->isKnownLanguageTag( $uselang ) ) {
-		$langCode = $uselang;
-	}
-	$lang = $languageFactory->getRawLanguage( $langCode );
+	$wgLang = Language::factory( $langCode );
 
-	RequestContext::getMain()->setLanguage( $lang );
-	$installer->setParserLanguage( $lang );
+	$installer->setParserLanguage( $wgLang );
 
 	$wgMetaNamespace = $wgCanonicalNamespaceNames[NS_PROJECT];
 
 	$session = $installer->execute( $session );
 
 	$_SESSION['installData'][$fingerprint] = $session;
+
 }

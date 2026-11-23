@@ -1,610 +1,535 @@
 <?php
 /**
- * The setup for all MediaWiki processes (both web-based and CLI).
+ * Include most things that's need to customize the site
  *
- * The entry point (such as WebStart.php and doMaintenance.php) has these responsibilities:
- * - The entry point MUST:
- *   - define the 'MEDIAWIKI' constant.
- * - The entry point SHOULD:
- *   - define the 'MW_ENTRY_POINT' constant.
- *   - display an error if MW_CONFIG_CALLBACK is not defined and the
- *     file specified in MW_CONFIG_FILE (or the LocalSettings.php default location)
- *     does not exist. The error should either be sent before and instead
- *     of the Setup.php inclusion, or (if it needs classes and dependencies
- *     from core) the error can be displayed via a MW_CONFIG_CALLBACK,
- *     which must then abort the process to prevent the rest of Setup.php
- *     from executing.
- *
- * This file does:
- * - run-time environment checks,
- * - define MW_INSTALL_PATH, and $IP,
- * - load autoloaders, constants, default settings, and global functions,
- * - load the site configuration (e.g. LocalSettings.php),
- * - load the enabled extensions (via ExtensionRegistry),
- * - trivial expansion of site configuration defaults and shortcuts
- *   (no calls to MediaWikiServices or other parts of MediaWiki),
- * - initialization of:
- *   - PHP run-time (setlocale, memory limit, default date timezone)
- *   - the debug logger (MWDebug)
- *   - the service container (MediaWikiServices)
- *   - the exception handler (MWExceptionHandler)
- *   - the session manager (SessionManager)
- * - complex expansion of site configuration defaults (those that require
- *   calling into MediaWikiServices, global functions, or other classes.).
- *
- * @license GPL-2.0-or-later
  * @file
  */
 
-// phpcs:disable MediaWiki.Usage.DeprecatedGlobalVariables
-use MediaWiki\Config\SiteConfiguration;
-use MediaWiki\Context\RequestContext;
-use MediaWiki\Debug\MWDebug;
-use MediaWiki\Exception\FatalError;
-use MediaWiki\Exception\HttpError;
-use MediaWiki\Exception\MWExceptionHandler;
-use MediaWiki\Exception\MWExceptionRenderer;
-use MediaWiki\HookContainer\HookRunner;
-use MediaWiki\Language\Language;
-use MediaWiki\Logger\LoggerFactory;
-use MediaWiki\MainConfigNames;
-use MediaWiki\MainConfigSchema;
-use MediaWiki\MediaWikiServices;
-use MediaWiki\Message\Message;
-use MediaWiki\Profiler\Profiler;
-use MediaWiki\Registration\ExtensionRegistry;
-use MediaWiki\Registration\MissingExtensionException;
-use MediaWiki\Request\HeaderCallback;
-use MediaWiki\Session\SessionManager;
-use MediaWiki\Settings\DynamicDefaultValues;
-use MediaWiki\Settings\LocalSettingsLoader;
-use MediaWiki\Settings\SettingsBuilder;
-use MediaWiki\Settings\Source\PhpSettingsSource;
-use MediaWiki\Settings\Source\ReflectionSchemaSource;
-use MediaWiki\Settings\WikiFarmSettingsLoader;
-use MediaWiki\StubObject\StubUserLang;
-use MediaWiki\Title\Title;
-use Psr\Log\LoggerInterface;
-use Wikimedia\Http\HttpStatus;
-use Wikimedia\RequestTimeout\RequestTimeout;
-use Wikimedia\Telemetry\SpanInterface;
-use Wikimedia\Telemetry\TracerState;
-
 /**
- * Environment checks
- *
- * These are inline checks done before we include any source files,
- * and thus these conditions may be assumed by all source code.
+ * This file is not a valid entry point, perform no further processing unless
+ * MEDIAWIKI is defined
  */
-
-// This file must be included from a valid entry point (e.g. WebStart.php, Maintenance.php)
 if ( !defined( 'MEDIAWIKI' ) ) {
 	exit( 1 );
 }
 
-// The MW_ENTRY_POINT constant must always exists, to make it safe to access.
-// For compat, we do support older and custom MW entrypoints that don't set this,
-// in which case we assign a default here.
-if ( !defined( 'MW_ENTRY_POINT' ) ) {
-	/**
-	 * The entry point, which may be either the script filename without the
-	 * file extension, or "cli" for maintenance scripts, or "unknown" for any
-	 * entry point that does not set the constant.
-	 */
-	define( 'MW_ENTRY_POINT', 'unknown' );
+# The main wiki script and things like database
+# conversion and maintenance scripts all share a
+# common setup of including lots of classes and
+# setting up a few globals.
+#
+
+$fname = 'Setup.php';
+wfProfileIn( $fname );
+
+// Check to see if we are at the file scope
+if ( !isset( $wgVersion ) ) {
+	echo "Error, Setup.php must be included from the file scope, after DefaultSettings.php\n";
+	die( 1 );
+}
+
+// Set various default paths sensibly...
+if ( $wgScript === false ) $wgScript = "$wgScriptPath/index$wgScriptExtension";
+if ( $wgRedirectScript === false ) $wgRedirectScript = "$wgScriptPath/redirect$wgScriptExtension";
+if ( $wgLoadScript === false ) $wgLoadScript = "$wgScriptPath/load$wgScriptExtension";
+
+if ( $wgArticlePath === false ) {
+	if ( $wgUsePathInfo ) {
+		$wgArticlePath      = "$wgScript/$1";
+	} else {
+		$wgArticlePath      = "$wgScript?title=$1";
+	}
+}
+
+if ( !empty($wgActionPaths) && !isset($wgActionPaths['view']) ) {
+	# 'view' is assumed the default action path everywhere in the code
+	# but is rarely filled in $wgActionPaths
+	$wgActionPaths['view'] = $wgArticlePath;
+}
+
+if ( !empty($wgActionPaths) && !isset($wgActionPaths['view']) ) {
+	# 'view' is assumed the default action path everywhere in the code
+	# but is rarely filled in $wgActionPaths 
+	$wgActionPaths['view'] = $wgArticlePath ;
+}
+
+if ( $wgStylePath === false ) $wgStylePath = "$wgScriptPath/skins";
+if ( $wgLocalStylePath === false ) $wgLocalStylePath = "$wgScriptPath/skins";
+if ( $wgStyleDirectory === false ) $wgStyleDirectory   = "$IP/skins";
+if ( $wgExtensionAssetsPath === false ) $wgExtensionAssetsPath = "$wgScriptPath/extensions";
+
+if ( $wgLogo === false ) $wgLogo = "$wgStylePath/common/images/wiki.png";
+
+if ( $wgUploadPath === false ) $wgUploadPath = "$wgScriptPath/images";
+if ( $wgUploadDirectory === false ) $wgUploadDirectory = "$IP/images";
+
+if ( $wgTmpDirectory === false ) $wgTmpDirectory = "{$wgUploadDirectory}/tmp";
+
+if ( $wgReadOnlyFile === false ) $wgReadOnlyFile = "{$wgUploadDirectory}/lock_yBgMBwiR";
+if ( $wgFileCacheDirectory === false ) $wgFileCacheDirectory = "{$wgUploadDirectory}/cache";
+if ( $wgDeletedDirectory === false ) $wgDeletedDirectory = "{$wgUploadDirectory}/deleted";
+
+if ( isset( $wgFileStore['deleted']['directory'] ) ) {
+	$wgDeletedDirectory = $wgFileStore['deleted']['directory'];
+}
+
+if ( isset( $wgFooterIcons['copyright'] ) &&
+	isset( $wgFooterIcons['copyright']['copyright'] ) &&
+	$wgFooterIcons['copyright']['copyright'] === array() )
+{
+	if ( isset( $wgCopyrightIcon ) && $wgCopyrightIcon ) {
+		$wgFooterIcons['copyright']['copyright'] = $wgCopyrightIcon;
+	} elseif ( $wgRightsIcon || $wgRightsText ) {
+		$wgFooterIcons['copyright']['copyright'] = array(
+			'url' => $wgRightsUrl,
+			'src' => $wgRightsIcon,
+			'alt' => $wgRightsText,
+		);
+	} else {
+		unset( $wgFooterIcons['copyright']['copyright'] );
+	}
+}
+
+if ( isset( $wgFooterIcons['poweredby'] ) &&
+	isset( $wgFooterIcons['poweredby']['mediawiki'] ) &&
+	$wgFooterIcons['poweredby']['mediawiki']['src'] === null )
+{
+	$wgFooterIcons['poweredby']['mediawiki']['src'] = "$wgStylePath/common/images/poweredby_mediawiki_88x31.png";
 }
 
 /**
- * @internal For read-only use in LocalSettings.php.
+ * Unconditional protection for NS_MEDIAWIKI since otherwise it's too easy for a
+ * sysadmin to set $wgNamespaceProtection incorrectly and leave the wiki insecure.
  *
- * Source code should use the MW_INSTALL_PATH constant instead (T56483).
+ * Note that this is the definition of editinterface and it can be granted to
+ * all users if desired.
  */
-$IP = wfDetectInstallPath(); // ensures MW_INSTALL_PATH is defined
+$wgNamespaceProtection[NS_MEDIAWIKI] = 'editinterface';
 
 /**
- * Pre-config setup: Before loading LocalSettings.php
- *
- * These are changes and additions to runtime that don't vary on site configuration.
+ * The canonical names of namespaces 6 and 7 are, as of v1.14, "File"
+ * and "File_talk".  The old names "Image" and "Image_talk" are
+ * retained as aliases for backwards compatibility.
  */
-require_once MW_INSTALL_PATH . '/includes/AutoLoader.php';
-require_once MW_INSTALL_PATH . '/includes/Defines.php';
-
-// Assert that composer dependencies were successfully loaded
-if ( !interface_exists( LoggerInterface::class ) ) {
-	$message = (
-		'<strong>Error: Missing external libraries.</strong> ' .
-		'MediaWiki depends on external libraries bundled with most MediaWiki distributions. ' .
-		"When installing MediaWiki from its Git reposistory, these must be installed separately.\n\n" .
-		'Please see the <a href="https://www.mediawiki.org/wiki/Download_from_Git' .
-		'#Fetch_external_libraries">instructions for installing libraries</a> on mediawiki.org ' .
-		'for help on installing the required libraries.'
-	);
-	http_response_code( 500 );
-	echo $message;
-	error_log( $message );
-	exit( 1 );
-}
-
-// Deprecated global variable for backwards-compatibility.
-// New code should check MW_ENTRY_POINT directly.
-$wgCommandLineMode = MW_ENTRY_POINT === 'cli';
+$wgNamespaceAliases['Image'] = NS_FILE;
+$wgNamespaceAliases['Image_talk'] = NS_FILE_TALK;
 
 /**
- * $wgConf hold the site configuration.
- * Not used for much in a default install.
- * @since 1.5
+ * Initialise $wgLockManagers to include basic FS version
  */
-$wgConf = new SiteConfiguration;
-
-$wgAutoloadClasses ??= [];
-
-$wgSettings = SettingsBuilder::getInstance();
-
-if ( defined( 'MW_USE_CONFIG_SCHEMA_CLASS' ) ) {
-	// Load config schema from MainConfigSchema. Useful for running scripts that
-	// generate other representations of the config schema. This is slow, so it
-	// should not be used for serving web traffic.
-	$wgSettings->load( new ReflectionSchemaSource( MainConfigSchema::class ) );
-} else {
-	$wgSettings->load( new PhpSettingsSource( MW_INSTALL_PATH . '/includes/config-schema.php' ) );
-}
-
-require_once MW_INSTALL_PATH . '/includes/GlobalFunctions.php';
-
-// Install callback for normalizing headers.
-HeaderCallback::register();
-
-// Tell HttpStatus to use HeaderCallback for reporting warnings when
-// attempting to set headers after the headers have already been sent.
-HttpStatus::registerHeadersSentCallback(
-	HeaderCallback::warnIfHeadersSent( ... )
+$wgLockManagers[] = array(
+	'name'          => 'fsLockManager',
+	'class'         => 'FSLockManager',
+	'lockDirectory' => "{$wgUploadDirectory}/lockdir",
+);
+$wgLockManagers[] = array(
+	'name'          => 'nullLockManager',
+	'class'         => 'NullLockManager',
 );
 
-// Set the encoding used by PHP for reading HTTP input, and writing output.
-// This is also the default for mbstring functions.
-mb_internal_encoding( 'UTF-8' );
-
 /**
- * Load LocalSettings.php
+ * Initialise $wgLocalFileRepo from backwards-compatible settings
  */
-
-// Initialize some config settings with dynamic defaults, and
-// make default settings available in globals for use in LocalSettings.php.
-$wgSettings->putConfigValues( [
-	MainConfigNames::ExtensionDirectory => MW_INSTALL_PATH . '/extensions',
-	MainConfigNames::StyleDirectory => MW_INSTALL_PATH . '/skins',
-	MainConfigNames::UploadDirectory => MW_INSTALL_PATH . '/images',
-	MainConfigNames::ServiceWiringFiles => [ MW_INSTALL_PATH . '/includes/ServiceWiring.php' ],
-	'Version' => MW_VERSION,
-] );
-$wgSettings->apply();
-
-// $wgSettings->apply() puts all configuration into global variables.
-// If we are not in global scope, make all relevant globals available
-// in this file's scope as well.
-$wgScopeTest = 'MediaWiki Setup.php scope test';
-if ( !isset( $GLOBALS['wgScopeTest'] ) || $GLOBALS['wgScopeTest'] !== $wgScopeTest ) {
-	foreach ( $wgSettings->getConfigSchema()->getDefinedKeys() as $key ) {
-		$var = "wg$key";
-		// phpcs:ignore MediaWiki.NamingConventions.ValidGlobalName.allowedPrefix
-		global $$var;
-	}
-	unset( $key, $var );
-}
-unset( $wgScopeTest );
-
-try {
-	if ( defined( 'MW_CONFIG_CALLBACK' ) ) {
-		call_user_func( MW_CONFIG_CALLBACK, $wgSettings );
+if ( !$wgLocalFileRepo ) {
+	if ( isset( $wgFileStore['deleted']['hash'] ) ) {
+		$deletedHashLevel = $wgFileStore['deleted']['hash'];
 	} else {
-		wfDetectLocalSettingsFile( MW_INSTALL_PATH );
-
-		if ( getenv( 'MW_USE_LOCAL_SETTINGS_LOADER' ) ) {
-			// NOTE: This will not work for configuration variables that use a prefix
-			//       other than "wg".
-			$localSettingsLoader = new LocalSettingsLoader( $wgSettings, MW_INSTALL_PATH );
-			$localSettingsLoader->loadLocalSettingsFile( MW_CONFIG_FILE );
-			unset( $localSettingsLoader );
-		} else {
-			if ( str_ends_with( MW_CONFIG_FILE, '.php' ) ) {
-				// make defaults available as globals
-				$wgSettings->apply();
-				require_once MW_CONFIG_FILE;
-			} else {
-				$wgSettings->loadFile( MW_CONFIG_FILE );
-			}
-		}
+		$deletedHashLevel = $wgHashedUploadDirectory ? 3 : 0;
 	}
-
-	// Make settings loaded by LocalSettings.php available in globals for use here
-	$wgSettings->apply();
-} catch ( MissingExtensionException $e ) {
-	// Make a common mistake give a friendly error
-	$e->render();
-}
-
-// If in a wiki-farm, load site-specific settings
-if ( $wgSettings->getConfig()->get( MainConfigNames::WikiFarmSettingsDirectory ) ) {
-	$wikiFarmSettingsLoader = new WikiFarmSettingsLoader( $wgSettings );
-	$wikiFarmSettingsLoader->loadWikiFarmSettings();
-	unset( $wikiFarmSettingsLoader );
-}
-
-// All settings should be loaded now.
-$wgSettings->enterRegistrationStage();
-
-/**
- * Customization point after most things are loaded (constants, functions, classes,
- * LocalSettings.
- * Note that this runs before extensions are registered, and before most singletons become
- * available, and before MediaWikiServices is initialized.
- */
-
-// This constant used to control MediaWiki's integration with PHP sessions, and we allowed users
-// to define it in LocalSettings.php. That integration has been removed and this constant is now
-// always defined for compatibility with code that checked for it.
-if ( !defined( 'MW_NO_SESSION_HANDLER' ) ) {
-	define( 'MW_NO_SESSION_HANDLER', 1 );
-}
-
-if ( defined( 'MW_SETUP_CALLBACK' ) ) {
-	call_user_func( MW_SETUP_CALLBACK, $wgSettings );
-	// Make any additional settings available in globals for use here
-	$wgSettings->apply();
-}
-
-// Apply dynamic defaults declared in config schema callbacks.
-$dynamicDefaults = new DynamicDefaultValues( $wgSettings->getConfigSchema() );
-$dynamicDefaults->applyDynamicDefaults( $wgSettings->getConfigBuilder() );
-
-// Make updated config available in global scope.
-$wgSettings->apply();
-
-// Apply dynamic defaults implemented in SetupDynamicConfig.php.
-// Ideally, all logic in SetupDynamicConfig would be converted to
-// callbacks in the config schema.
-require __DIR__ . '/SetupDynamicConfig.php';
-
-if ( defined( 'MW_AUTOLOAD_TEST_CLASSES' ) ) {
-	require_once __DIR__ . '/../tests/Common/TestsAutoLoader.php';
-}
-
-// Start time limit
-if ( $wgRequestTimeLimit && MW_ENTRY_POINT !== 'cli' ) {
-	RequestTimeout::singleton()->setWallTimeLimit( $wgRequestTimeLimit );
-}
-
-/**
- * Load queued extensions
- */
-if ( defined( 'MW_AUTOLOAD_TEST_CLASSES' ) ) {
-	ExtensionRegistry::getInstance()->setLoadTestClassesAndNamespaces( true );
-}
-
-ExtensionRegistry::getInstance()->setSettingsBuilder( $wgSettings );
-ExtensionRegistry::getInstance()->loadFromQueue();
-// Don't let any other extensions load
-ExtensionRegistry::getInstance()->finish();
-
-/**
- * Customization point after ALL loading (constants, functions, classes,
- * LocalSettings, extensions, dynamic defaults).
- * Note that this runs before MediaWikiServices is initialized.
- */
-if ( defined( 'MW_FINAL_SETUP_CALLBACK' ) ) {
-	call_user_func( MW_FINAL_SETUP_CALLBACK, $wgSettings );
-	// Make any additional settings available in globals for use below
-	$wgSettings->apply();
-}
-
-// Config can no longer be changed.
-$wgSettings->enterReadOnlyStage();
-
-// Determine an appropriate locale (T291234)
-// As of version 8, php no longer inherits the platform's locale so there
-// shouldn't be a need to set a locale.  However, setlocale is used to
-// determine if the locale is available.  macOS is avoided because setting
-// it to C.UTF-8 changes pcre character classes on that platform.
-if ( PHP_OS_FAMILY !== 'Darwin' && setlocale( LC_ALL, 'C.UTF-8' ) ) {
-	$locale = 'C.UTF-8';
-} else {
-	$locale = 'C';
-}
-// The putenv() is meant to propagate the choice of locale to shell commands
-// so that they will interpret UTF-8 correctly. If you have a problem with a
-// shell command and need to send a special locale, you can override the locale
-// with Command::environment().
-putenv( "LC_ALL={$locale}" );
-unset( $locale );
-
-// Set PHP runtime to the desired timezone
-date_default_timezone_set( $wgLocaltimezone );
-
-MWDebug::setup();
-
-// Enable the global service locator.
-// Trivial expansion of site configuration should go before this point.
-// Any non-trivial expansion that requires calling into MediaWikiServices or other parts of MW.
-MediaWikiServices::allowGlobalInstance();
-
-// Define a constant that indicates that the bootstrapping of the service locator
-// is complete.
-define( 'MW_SERVICE_BOOTSTRAP_COMPLETE', 1 );
-
-MWExceptionRenderer::setShowExceptionDetails( $wgShowExceptionDetails );
-if ( !defined( 'MW_PHPUNIT_TEST' ) ) {
-	// Never install the handler in PHPUnit tests, otherwise PHPUnit's own handler will be unset and things
-	// like convertWarningsToExceptions won't work.
-	MWExceptionHandler::installHandler( $wgLogExceptionBacktrace, $wgPropagateErrors );
-}
-Profiler::init( $wgProfiler );
-
-// Initialize the root span for distributed tracing if we're in a web request context (T340552).
-// Do this here since subsequent setup code, e.g. session initialization or post-setup hooks,
-// may themselves create spans, so the root span needs to have been initialized by then.
-call_user_func( static function (): void {
-	if ( wfIsCLI() ) {
-		return;
-	}
-
-	$tracer = MediaWikiServices::getInstance()->getTracer();
-	$request = RequestContext::getMain()->getRequest();
-	// Backdate the start of the root span to the timestamp where PHP actually started working on this operation.
-	$startTimeNanos = (int)( 1e9 * $_SERVER['REQUEST_TIME_FLOAT'] );
-	// Avoid high cardinality URL path as root span name, instead safely use the HTTP method.
-	// Per OTEL Semantic Conventions, https://opentelemetry.io/docs/specs/semconv/http/http-spans/
-	$spanName = "EntryPoint " . MW_ENTRY_POINT . ".php HTTP {$request->getMethod()}";
-	global $wgAllowExternalReqID;
-	$rootSpan = $tracer->createRootSpanFromCarrier( $spanName, $wgAllowExternalReqID ? $request->getAllHeaders() : [] );
-	$rootSpan->setSpanKind( SpanInterface::SPAN_KIND_SERVER )
-			->setAttributes( array_filter( [
-				'http.request.method' => $request->getMethod(),
-				'url.path' => $request->getRequestURL(),
-				'server.name' => $_SERVER['SERVER_NAME'] ?? null,
-			] ) )
-			->start( $startTimeNanos );
-	$rootSpan->activate();
-
-	TracerState::getInstance()->setRootSpan( $rootSpan );
-} );
-
-// Non-trivial validation of: $wgServer
-// The FatalError page only renders cleanly after MWExceptionHandler is installed.
-if ( $wgServer === false ) {
-	// T30798: $wgServer must be explicitly set
-	throw new FatalError(
-		'$wgServer must be set in LocalSettings.php. ' .
-		'See <a href="https://www.mediawiki.org/wiki/Manual:$wgServer">' .
-		'https://www.mediawiki.org/wiki/Manual:$wgServer</a>.'
+	$wgLocalFileRepo = array(
+		'class' => 'LocalRepo',
+		'name' => 'local',
+		'directory' => $wgUploadDirectory,
+		'scriptDirUrl' => $wgScriptPath,
+		'scriptExtension' => $wgScriptExtension,
+		'url' => $wgUploadBaseUrl ? $wgUploadBaseUrl . $wgUploadPath : $wgUploadPath,
+		'hashLevels' => $wgHashedUploadDirectory ? 2 : 0,
+		'thumbScriptUrl' => $wgThumbnailScriptPath,
+		'transformVia404' => !$wgGenerateThumbnailOnParse,
+		'deletedDir' => $wgDeletedDirectory,
+		'deletedHashLevels' => $deletedHashLevel
 	);
 }
-
-// Non-trivial expansion of: $wgCanonicalServer, $wgServerName.
-// These require calling global functions.
-// Also here are other settings that further depend on these two.
-if ( $wgCanonicalServer === false ) {
-	$wgCanonicalServer = MediaWikiServices::getInstance()->getUrlUtils()->getCanonicalServer();
-}
-if ( $wgHTTPUserAgentContact === false ) {
-	$wgHTTPUserAgentContact = $wgCanonicalServer;
-}
-
-if ( $wgServerName !== false ) {
-	wfWarn( '$wgServerName should be derived from $wgCanonicalServer, '
-		. 'not customized. Overwriting $wgServerName.' );
-}
-$wgServerName = parse_url( $wgCanonicalServer, PHP_URL_HOST );
-
-// $wgEmergencyContact and $wgPasswordSender may be false or empty string (T104142)
-if ( !$wgEmergencyContact ) {
-	$wgEmergencyContact = 'wikiadmin@' . $wgServerName;
-}
-if ( !$wgPasswordSender ) {
-	$wgPasswordSender = 'apache@' . $wgServerName;
-}
-if ( !$wgNoReplyAddress ) {
-	$wgNoReplyAddress = $wgPasswordSender;
-}
-
-// Non-trivial expansion of: $wgSecureLogin
-// (due to calling wfWarn).
-if ( $wgSecureLogin && !str_starts_with( $wgServer, '//' ) ) {
-	$wgSecureLogin = false;
-	wfWarn( 'Secure login was enabled on a server that only supports '
-		. 'HTTP or HTTPS. Disabling secure login.' );
-}
-
-// Now that GlobalFunctions is loaded, set defaults that depend on it.
-if ( $wgTmpDirectory === false ) {
-	$wgTmpDirectory = wfTempDir();
-}
-
-if ( $wgSharedDB && $wgSharedTables ) {
-	// Apply $wgSharedDB table aliases for the local LB (all non-foreign DB connections)
-	MediaWikiServices::getInstance()->getDBLoadBalancer()->setTableAliases(
-		array_fill_keys(
-			$wgSharedTables,
-			[
-				'dbname' => $wgSharedDB,
-				'schema' => $wgSharedSchema,
-				'prefix' => $wgSharedPrefix
-			]
-		)
-	);
-}
-
-// Raise the memory limit if it's too low
-// NOTE: This use wfDebug, and must remain after the MWDebug::setup() call.
-wfMemoryLimit( $wgMemoryLimit );
-
-// Explicit globals, so this works with bootstrap.php
-global $wgRequest;
-
-// Initialize the request object in $wgRequest
-$wgRequest = RequestContext::getMain()->getRequest(); // BackCompat
-
-// Make sure that object caching does not undermine the ChronologyProtector improvements
-if ( RequestContext::getMain()->getRequest()->getCookie( 'UseDC', '' ) === 'master' ) {
-	// The user is pinned to the primary DC, meaning that they made recent changes which should
-	// be reflected in their subsequent web requests. Avoid the use of interim cache keys because
-	// they use a blind TTL and could be stale if an object changes twice in a short time span.
-	MediaWikiServices::getInstance()->getMainWANObjectCache()->useInterimHoldOffCaching( false );
-}
-
-// Useful debug output
-( static function () {
-	$logger = LoggerFactory::getInstance( 'wfDebug' );
-	if ( MW_ENTRY_POINT === 'cli' ) {
-		$self = $_SERVER['PHP_SELF'] ?? '';
-		$logger->debug( "\n\nStart command line script $self" );
+/**
+ * Initialise shared repo from backwards-compatible settings
+ */
+if ( $wgUseSharedUploads ) {
+	if ( $wgSharedUploadDBname ) {
+		$wgForeignFileRepos[] = array(
+			'class' => 'ForeignDBRepo',
+			'name' => 'shared',
+			'directory' => $wgSharedUploadDirectory,
+			'url' => $wgSharedUploadPath,
+			'hashLevels' => $wgHashedSharedUploadDirectory ? 2 : 0,
+			'thumbScriptUrl' => $wgSharedThumbnailScriptPath,
+			'transformVia404' => !$wgGenerateThumbnailOnParse,
+			'dbType' => $wgDBtype,
+			'dbServer' => $wgDBserver,
+			'dbUser' => $wgDBuser,
+			'dbPassword' => $wgDBpassword,
+			'dbName' => $wgSharedUploadDBname,
+			'dbFlags' => ( $wgDebugDumpSql ? DBO_DEBUG : 0 ) | DBO_DEFAULT,
+			'tablePrefix' => $wgSharedUploadDBprefix,
+			'hasSharedCache' => $wgCacheSharedUploads,
+			'descBaseUrl' => $wgRepositoryBaseUrl,
+			'fetchDescription' => $wgFetchCommonsDescriptions,
+		);
 	} else {
-		$request = RequestContext::getMain()->getRequest();
-		$debug = "\n\nStart request {$request->getMethod()} {$request->getRequestURL()}\n";
-		$debug .= "IP: " . $request->getIP() . "\n";
-		$debug .= "HTTP HEADERS:\n";
-		foreach ( $request->getAllHeaders() as $name => $value ) {
-			$debug .= "$name: $value\n";
-		}
-		$debug .= "(end headers)";
-		$logger->debug( $debug );
-	}
-} )();
-
-$settingsWarnings = $wgSettings->getWarnings();
-if ( $settingsWarnings ) {
-	$logger = LoggerFactory::getInstance( 'Settings' );
-	foreach ( $settingsWarnings as $msg ) {
-		$logger->warning( $msg );
-	}
-	unset( $msg );
-	unset( $logger );
-}
-unset( $settingsWarnings );
-
-// Most of the config is out, some might want to run hooks here.
-( new HookRunner( MediaWikiServices::getInstance()->getHookContainer() ) )->onSetupAfterCache();
-
-// Now that variant lists may be available, parse any action paths and article paths
-// as query parameters.
-//
-// Skip title interpolation on API queries where it is useless and sometimes harmful (T18019).
-//
-// Optimization: Skip on load.php and all other entrypoints besides index.php to save time.
-//
-// TODO: Figure out if this can be safely done after everything else in Setup.php (e.g. any
-// hooks or other state that would miss this?). If so, move to wfIndexMain or MediaWiki::run.
-if ( MW_ENTRY_POINT === 'index' ) {
-	RequestContext::getMain()->getRequest()->interpolateTitle();
-}
-
-if ( !defined( 'MW_NO_SESSION' ) && MW_ENTRY_POINT !== 'cli' ) {
-	// @phan-suppress-next-line PhanUndeclaredMethod shutdown() is not part of the public interface
-	register_shutdown_function( MediaWikiServices::getInstance()->getSessionManager()->shutdown( ... ) );
-
-	$contLang = MediaWikiServices::getInstance()->getContentLanguage();
-
-	// Initialize the session
-	try {
-		$session = RequestContext::getMain()->getRequest()->getSession();
-	} catch ( MediaWiki\Session\SessionOverflowException $ex ) {
-		// The exception is because the request had multiple possible
-		// sessions tied for top priority. Report this to the user.
-		$list = [];
-		foreach ( $ex->getSessionInfos() as $info ) {
-			$list[] = $info->getProvider()->describe( $contLang );
-		}
-		$list = $contLang->listToText( $list );
-		throw new HttpError( 400,
-			Message::newFromKey( 'sessionmanager-tie', $list )->inLanguage( $contLang )
+		$wgForeignFileRepos[] = array(
+			'class' => 'FileRepo',
+			'name' => 'shared',
+			'directory' => $wgSharedUploadDirectory,
+			'url' => $wgSharedUploadPath,
+			'hashLevels' => $wgHashedSharedUploadDirectory ? 2 : 0,
+			'thumbScriptUrl' => $wgSharedThumbnailScriptPath,
+			'transformVia404' => !$wgGenerateThumbnailOnParse,
+			'descBaseUrl' => $wgRepositoryBaseUrl,
+			'fetchDescription' => $wgFetchCommonsDescriptions,
 		);
 	}
+}
+if ( $wgUseInstantCommons ) {
+	$wgForeignFileRepos[] = array(
+		'class'                  => 'ForeignAPIRepo',
+		'name'                   => 'wikimediacommons',
+		'apibase'                => WebRequest::detectProtocol() === 'https' ?
+			'https://commons.wikimedia.org/w/api.php' :
+			'http://commons.wikimedia.org/w/api.php',
+		'hashLevels'             => 2,
+		'fetchDescription'       => true,
+		'descriptionCacheExpiry' => 43200,
+		'apiThumbCacheExpiry'    => 86400,
+	);
+}
+/*
+ * Add on default file backend config for file repos.
+ * FileBackendGroup will handle initializing the backends.
+ */
+if ( !isset( $wgLocalFileRepo['backend'] ) ) {
+	$wgLocalFileRepo['backend'] = $wgLocalFileRepo['name'] . '-backend';
+}
+foreach ( $wgForeignFileRepos as &$repo ) {
+	if ( !isset( $repo['directory'] ) && $repo['class'] === 'ForeignAPIRepo' ) {
+		$repo['directory'] = $wgUploadDirectory; // b/c
+	}
+	if ( !isset( $repo['backend'] ) ) {
+		$repo['backend'] = $repo['name'] . '-backend';
+	}
+}
+unset( $repo ); // no global pollution; destroy reference
 
-	unset( $contLang );
-
-	$session->renew();
-	unset( $session );
+if ( is_null( $wgEnableAutoRotation ) ) {
+	// Only enable auto-rotation when the bitmap handler can rotate
+	$wgEnableAutoRotation = BitmapHandler::canRotate();
 }
 
-// Explicit globals, so this works with bootstrap.php
-global $wgLang, $wgOut, $wgTitle;
+if ( $wgRCFilterByAge ) {
+	# # Trim down $wgRCLinkDays so that it only lists links which are valid
+	# # as determined by $wgRCMaxAge.
+	# # Note that we allow 1 link higher than the max for things like 56 days but a 60 day link.
+	sort( $wgRCLinkDays );
+	for ( $i = 0; $i < count( $wgRCLinkDays ); $i++ ) {
+		if ( $wgRCLinkDays[$i] >= $wgRCMaxAge / ( 3600 * 24 ) ) {
+			$wgRCLinkDays = array_slice( $wgRCLinkDays, 0, $i + 1, false );
+			break;
+		}
+	}
+}
+
+if ( $wgSkipSkin ) {
+	$wgSkipSkins[] = $wgSkipSkin;
+}
+
+# Set default shared prefix
+if ( $wgSharedPrefix === false ) {
+	$wgSharedPrefix = $wgDBprefix;
+}
+
+if ( !$wgCookiePrefix ) {
+	if ( $wgSharedDB && $wgSharedPrefix && in_array( 'user', $wgSharedTables ) ) {
+		$wgCookiePrefix = $wgSharedDB . '_' . $wgSharedPrefix;
+	} elseif ( $wgSharedDB && in_array( 'user', $wgSharedTables ) ) {
+		$wgCookiePrefix = $wgSharedDB;
+	} elseif ( $wgDBprefix ) {
+		$wgCookiePrefix = $wgDBname . '_' . $wgDBprefix;
+	} else {
+		$wgCookiePrefix = $wgDBname;
+	}
+}
+$wgCookiePrefix = strtr( $wgCookiePrefix, '=,; +."\'\\[', '__________' );
+
+$wgUseEnotif = $wgEnotifUserTalk || $wgEnotifWatchlist;
+
+if ( $wgMetaNamespace === false ) {
+	$wgMetaNamespace = str_replace( ' ', '_', $wgSitename );
+}
 
 /**
- * @var Language|StubUserLang $wgLang
- * @deprecated since 1.47, use an available context source when possible, or, as a backup,
- * RequestContext::getMain()
+ * Definitions of the NS_ constants are in Defines.php
+ * @private
+ */
+$wgCanonicalNamespaceNames = array(
+	NS_MEDIA            => 'Media',
+	NS_SPECIAL          => 'Special',
+	NS_TALK             => 'Talk',
+	NS_USER             => 'User',
+	NS_USER_TALK        => 'User_talk',
+	NS_PROJECT          => 'Project',
+	NS_PROJECT_TALK     => 'Project_talk',
+	NS_FILE             => 'File',
+	NS_FILE_TALK        => 'File_talk',
+	NS_MEDIAWIKI        => 'MediaWiki',
+	NS_MEDIAWIKI_TALK   => 'MediaWiki_talk',
+	NS_TEMPLATE         => 'Template',
+	NS_TEMPLATE_TALK    => 'Template_talk',
+	NS_HELP             => 'Help',
+	NS_HELP_TALK        => 'Help_talk',
+	NS_CATEGORY         => 'Category',
+	NS_CATEGORY_TALK    => 'Category_talk',
+);
+
+/// @todo UGLY UGLY
+if( is_array( $wgExtraNamespaces ) ) {
+	$wgCanonicalNamespaceNames = $wgCanonicalNamespaceNames + $wgExtraNamespaces;
+}
+
+# These are now the same, always
+# To determine the user language, use $wgLang->getCode()
+$wgContLanguageCode = $wgLanguageCode;
+
+# Easy to forget to falsify $wgShowIPinHeader for static caches.
+# If file cache or squid cache is on, just disable this (DWIMD).
+# Do the same for $wgDebugToolbar.
+if ( $wgUseFileCache || $wgUseSquid ) {
+	$wgShowIPinHeader = false;
+	$wgDebugToolbar = false;
+}
+
+# $wgAllowRealName and $wgAllowUserSkin were removed in 1.16
+# in favor of $wgHiddenPrefs, handle b/c here
+if ( !$wgAllowRealName ) {
+	$wgHiddenPrefs[] = 'realname';
+}
+
+# Doesn't make sense to have if disabled.
+if ( !$wgEnotifMinorEdits ) {
+	$wgHiddenPrefs[] = 'enotifminoredits';
+}
+
+# $wgDisabledActions is deprecated as of 1.18
+foreach( $wgDisabledActions as $action ){
+	$wgActions[$action] = false;
+}
+if( !$wgAllowPageInfo ){
+	$wgActions['info'] = false;
+}
+
+if ( !$wgHtml5Version && $wgHtml5 && $wgAllowRdfaAttributes ) {
+	# see http://www.w3.org/TR/rdfa-in-html/#document-conformance
+	if ( $wgMimeType == 'application/xhtml+xml' ) {
+		$wgHtml5Version = 'XHTML+RDFa 1.0';
+	} else {
+		$wgHtml5Version = 'HTML+RDFa 1.0';
+	}
+}
+
+# Blacklisted file extensions shouldn't appear on the "allowed" list
+$wgFileExtensions = array_diff ( $wgFileExtensions, $wgFileBlacklist );
+
+if ( $wgArticleCountMethod === null ) {
+	$wgArticleCountMethod = $wgUseCommaCount ? 'comma' : 'link';
+}
+
+if ( $wgInvalidateCacheOnLocalSettingsChange ) {
+	$wgCacheEpoch = max( $wgCacheEpoch, gmdate( 'YmdHis', @filemtime( "$IP/LocalSettings.php" ) ) );
+}
+
+if ( $wgAjaxUploadDestCheck ) {
+	$wgAjaxExportList[] = 'SpecialUpload::ajaxGetExistsWarning';
+}
+
+if ( $wgNewUserLog ) {
+	# Add a new log type
+	$wgLogTypes[]                        = 'newusers';
+	$wgLogNames['newusers']              = 'newuserlogpage';
+	$wgLogHeaders['newusers']            = 'newuserlogpagetext';
+	# newusers, create, create2, autocreate
+	$wgLogActionsHandlers['newusers/*']  = 'NewUsersLogFormatter';
+}
+
+if ( $wgCookieSecure === 'detect' ) {
+	$wgCookieSecure = ( substr( $wgServer, 0, 6 ) === 'https:' );
+}
+
+// Disable MWDebug for command line mode, this prevents MWDebug from eating up
+// all the memory from logging SQL queries on maintenance scripts
+global $wgCommandLineMode;
+if ( $wgDebugToolbar && !$wgCommandLineMode ) {
+	MWDebug::init();
+}
+
+if ( !defined( 'MW_COMPILED' ) ) {
+	if ( !MWInit::classExists( 'AutoLoader' ) ) {
+		require_once( "$IP/includes/AutoLoader.php" );
+	}
+
+	wfProfileIn( $fname . '-exception' );
+	MWExceptionHandler::installHandler();
+	wfProfileOut( $fname . '-exception' );
+
+	wfProfileIn( $fname . '-includes' );
+	require_once( "$IP/includes/normal/UtfNormalUtil.php" );
+	require_once( "$IP/includes/GlobalFunctions.php" );
+	require_once( "$IP/includes/ProxyTools.php" );
+	require_once( "$IP/includes/ImageFunctions.php" );
+	require_once( "$IP/includes/normal/UtfNormalDefines.php" );
+	wfProfileOut( $fname . '-includes' );
+}
+
+# Now that GlobalFunctions is loaded, set the default for $wgCanonicalServer
+if ( $wgCanonicalServer === false ) {
+	$wgCanonicalServer = wfExpandUrl( $wgServer, PROTO_HTTP );
+}
+
+wfProfileIn( $fname . '-misc1' );
+
+# Raise the memory limit if it's too low
+wfMemoryLimit();
+
+/**
+ * Set up the timezone, suppressing the pseudo-security warning in PHP 5.1+
+ * that happens whenever you use a date function without the timezone being
+ * explicitly set. Inspired by phpMyAdmin's treatment of the problem.
+ */
+if ( is_null( $wgLocaltimezone) ) {
+	wfSuppressWarnings();
+	$wgLocaltimezone = date_default_timezone_get();
+	wfRestoreWarnings();
+}
+
+date_default_timezone_set( $wgLocaltimezone );
+if( is_null( $wgLocalTZoffset ) ) {
+	$wgLocalTZoffset = date( 'Z' ) / 60;
+}
+
+# Useful debug output
+if ( $wgCommandLineMode ) {
+	$wgRequest = new FauxRequest( array() );
+
+	wfDebug( "\n\nStart command line script $self\n" );
+} else {
+	# Can't stub this one, it sets up $_GET and $_REQUEST in its constructor
+	$wgRequest = new WebRequest;
+
+	$debug = "Start request\n\n{$_SERVER['REQUEST_METHOD']} {$wgRequest->getRequestURL()}";
+
+	if ( $wgDebugPrintHttpHeaders ) {
+		$debug .= "\nHTTP HEADERS:\n";
+
+		foreach ( $wgRequest->getAllHeaders() as $name => $value ) {
+			$debug .= "$name: $value\n";
+		}
+	}
+	wfDebug( "$debug\n" );
+}
+
+wfProfileOut( $fname . '-misc1' );
+wfProfileIn( $fname . '-memcached' );
+
+$wgMemc = wfGetMainCache();
+$messageMemc = wfGetMessageCacheStorage();
+$parserMemc = wfGetParserCacheStorage();
+
+wfDebug( 'CACHES: ' . get_class( $wgMemc ) . '[main] ' .
+	get_class( $messageMemc ) . '[message] ' .
+	get_class( $parserMemc ) . "[parser]\n" );
+
+wfProfileOut( $fname . '-memcached' );
+
+# # Most of the config is out, some might want to run hooks here.
+wfRunHooks( 'SetupAfterCache' );
+
+wfProfileIn( $fname . '-session' );
+
+# If session.auto_start is there, we can't touch session name
+if ( !wfIniGetBool( 'session.auto_start' ) ) {
+	session_name( $wgSessionName ? $wgSessionName : $wgCookiePrefix . '_session' );
+}
+
+if ( !defined( 'MW_NO_SESSION' ) && !$wgCommandLineMode ) {
+	if ( $wgRequest->checkSessionCookie() || isset( $_COOKIE[$wgCookiePrefix . 'Token'] ) ) {
+		wfIncrStats( 'request_with_session' );
+		wfSetupSession();
+		$wgSessionStarted = true;
+	} else {
+		wfIncrStats( 'request_without_session' );
+		$wgSessionStarted = false;
+	}
+}
+
+wfProfileOut( $fname . '-session' );
+wfProfileIn( $fname . '-globals' );
+
+$wgContLang = Language::factory( $wgLanguageCode );
+$wgContLang->initEncoding();
+$wgContLang->initContLang();
+
+// Now that variant lists may be available...
+$wgRequest->interpolateTitle();
+$wgUser = RequestContext::getMain()->getUser(); # BackCompat
+
+/**
+ * @var Language
  */
 $wgLang = new StubUserLang;
 
 /**
- * @var MediaWiki\Output\OutputPage $wgOut
+ * @var OutputPage
  */
-$wgOut = RequestContext::getMain()->getOutput(); // BackCompat
+$wgOut = RequestContext::getMain()->getOutput(); # BackCompat
 
 /**
- * @var Title|null $wgTitle
+ * @var Parser
  */
+$wgParser = new StubObject( 'wgParser', $wgParserConf['class'], array( $wgParserConf ) );
+
+if ( !is_object( $wgAuth ) ) {
+	$wgAuth = new StubObject( 'wgAuth', 'AuthPlugin' );
+	wfRunHooks( 'AuthPluginSetup', array( &$wgAuth ) );
+}
+
+# Placeholders in case of DB error
 $wgTitle = null;
 
-// Explicit globals, so this works with bootstrap.php
-global $wgExtensionFunctions;
+$wgDeferredUpdateList = array();
 
-// Extension setup functions
-// Entries should be added to this variable during the inclusion
-// of the extension file. This allows the extension to perform
-// any necessary initialisation in the fully initialised environment
+wfProfileOut( $fname . '-globals' );
+wfProfileIn( $fname . '-extensions' );
+
+# Extension setup functions for extensions other than skins
+# Entries should be added to this variable during the inclusion
+# of the extension file. This allows the extension to perform
+# any necessary initialisation in the fully initialised environment
 foreach ( $wgExtensionFunctions as $func ) {
-	$func();
+	# Allow closures in PHP 5.3+
+	if ( is_object( $func ) && $func instanceof Closure ) {
+		$profName = $fname . '-extensions-closure';
+	} elseif ( is_array( $func ) ) {
+		if ( is_object( $func[0] ) )
+			$profName = $fname . '-extensions-' . get_class( $func[0] ) . '::' . $func[1];
+		else
+			$profName = $fname . '-extensions-' . implode( '::', $func );
+	} else {
+		$profName = $fname . '-extensions-' . strval( $func );
+	}
+
+	wfProfileIn( $profName );
+	call_user_func( $func );
+	wfProfileOut( $profName );
 }
-unset( $func ); // no global pollution; destroy reference
 
-// Explicit globals, so this works with bootstrap.php
-global $wgFullyInitialised;
+wfDebug( "Fully initialised\n" );
+$wgFullyInitialised = true;
 
-// If the session user has a valid name but is not yet registered, that means we need to autocreate it.
-if ( !defined( 'MW_NO_SESSION' ) && MW_ENTRY_POINT !== 'cli' ) {
-	$sessionUser = RequestContext::getMain()->getRequest()->getSession()->getUser();
-	$autocreateStatus = null;
-	if ( !$sessionUser->isRegistered() &&
-		MediaWikiServices::getInstance()->getUserNameUtils()->isValid( $sessionUser->getName() )
-	) {
-		$autocreateStatus = MediaWikiServices::getInstance()->getAuthManager()->autoCreateUser(
-			$sessionUser,
-			MediaWiki\Auth\AuthManager::AUTOCREATE_SOURCE_SESSION
-		);
-		// If successful, the User object has been updated with its new ID
-	}
-	// Autocreation is the last requirement before $wgFullyInitialised lets other code call the User object.
-	$wgFullyInitialised = true;
-
-	// T264370
-	$manager = MediaWikiServices::getInstance()->getSessionManager();
-	if ( $manager instanceof SessionManager ) {
-		$manager->logPotentialSessionLeakage();
-	}
-	unset( $manager );
-
-	if ( $autocreateStatus ) {
-		// If we tried to autocreate a user, ensure that everything is in a consistent state.
-		// Must be after $wgFullyInitialised
-		if ( $autocreateStatus->isOK() ) {
-			if ( !$sessionUser->isRegistered() ) {
-				throw new LogicException( "Session user should be registered, but it's not" );
-			}
-			if ( !RequestContext::getMain()->getUser()->isRegistered() ) {
-				throw new LogicException( "Global context user should be registered, but it's not" );
-			}
-		} else {
-			if ( $sessionUser->isRegistered() ) {
-				throw new LogicException( "Session user should not be registered, but it is" );
-			}
-			if ( RequestContext::getMain()->getUser()->isRegistered() ) {
-				throw new LogicException( "Global context user should not be registered, but it is" );
-			}
-		}
-	}
-	unset( $sessionUser );
-	unset( $autocreateStatus );
-} else {
-	// MW_NO_SESSION or CLI
-	$wgFullyInitialised = true;
-}
+wfProfileOut( $fname . '-extensions' );
+wfProfileOut( $fname );

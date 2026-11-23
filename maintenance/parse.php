@@ -1,17 +1,8 @@
 <?php
-
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Parser\Parser;
-use MediaWiki\Parser\ParserOptions;
-use MediaWiki\Parser\Parsoid\ParsoidParser;
-use MediaWiki\Title\Title;
-use Wikimedia\Parsoid\Utils\ContentUtils;
-
 /**
- * Parse some wikitext.
- *
+ * CLI script to easily parse some wikitext.
  * Wikitext can be given by stdin or using a file. The wikitext will be parsed
- * using 'CLIParser' as a title. This can be overridden with --title option.
+ * using 'CLIParser' as a title. This can be overriden with --title option.
  *
  * Example1:
  * @code
@@ -36,43 +27,25 @@ use Wikimedia\Parsoid\Utils\ContentUtils;
  * </p>$
  * @endcode
  *
- * @license GPL-2.0-or-later
- * @file
  * @ingroup Maintenance
  * @author Antoine Musso <hashar at free dot fr>
- * @license GPL-2.0-or-later
+ * @license GNU General Public License 2.0 or later
  */
+require_once( dirname(__FILE__) . '/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script to parse some wikitext.
- *
- * @ingroup Maintenance
- */
 class CLIParser extends Maintenance {
-	/** @var Parser|ParsoidParser */
 	protected $parser;
 
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Parse a given wikitext' );
-		$this->addOption(
-			'title',
-			'Title name for the given wikitext (Default: \'CLIParser\')',
-			false,
-			true
-		);
+		$this->mDescription = "Parse a given wikitext";
+		$this->addOption( 'title', 'Title name for the given wikitext (Default: \'CLIParser\')', false, true );
 		$this->addArg( 'file', 'File containing wikitext (Default: stdin)', false );
-		$this->addOption( 'parsoid', 'Whether to use Parsoid', false, false, 'p' );
-		$this->addOption( 'show-rich-attributes', 'Show rich attributes', false );
 	}
 
 	public function execute() {
 		$this->initParser();
-		print $this->render( $this->Wikitext() );
+		print $this->render( $this->WikiText() );
 	}
 
 	/**
@@ -80,23 +53,7 @@ class CLIParser extends Maintenance {
 	 * @return string HTML Rendering
 	 */
 	public function render( $wikitext ) {
-		$options = ParserOptions::newFromAnon();
-		$options->setOption( 'enableLimitReport', false );
-		$options->setUseParsoid( $this->hasOption( 'parsoid' ) );
-		$po = $this->parser->parse(
-			$wikitext,
-			$this->getTitle(),
-			$options
-		);
-		// TODO T371008 consider if using the Content framework makes sense instead of creating the pipeline
-		$pipeline = $this->getServiceContainer()->getDefaultOutputPipeline();
-		$po = $pipeline->run( $po, $options, [ 'wrapperDivClass' => '' ] );
-		if ( $this->getOption( 'show-rich-attributes' ) ) {
-			$df = $po->getContentHolder()->getAsDom();
-			$df ??= $po->getContentHolder()->createFragment();
-			return ContentUtils::dumpDOM( $df, '', [ 'quiet' => true ] );
-		}
-		return $po->getContentHolderText();
+		return $this->parse( $wikitext )->getText();
 	}
 
 	/**
@@ -104,42 +61,50 @@ class CLIParser extends Maintenance {
 	 * @return string Wikitext
 	 */
 	protected function Wikitext() {
-		$php_stdin = 'php://stdin';
+
+		$php_stdin  = 'php://stdin';
 		$input_file = $this->getArg( 0, $php_stdin );
 
-		if ( $input_file === $php_stdin && !$this->mQuiet ) {
-			$ctrl = wfIsWindows() ? 'CTRL+Z' : 'CTRL+D';
-			$this->error( basename( __FILE__ )
-				. ": warning: reading wikitext from STDIN. Press $ctrl to parse.\n" );
+		if( $input_file === $php_stdin ) {
+			$this->error( basename(__FILE__) .": warning: reading wikitext from STDIN\n" );
 		}
 
 		return file_get_contents( $input_file );
 	}
 
 	protected function initParser() {
-		$services = $this->getServiceContainer();
-		if ( $this->hasOption( 'parsoid' ) ) {
-			$this->parser = $services->getParsoidParserFactory()->create();
-		} else {
-			$this->parser = $services->getParserFactory()->create();
-		}
+		global $wgParserConf;
+		$parserClass = $wgParserConf['class'];
+		$this->parser = new $parserClass();
 	}
 
 	/**
 	 * Title object to use for CLI parsing.
-	 * Default title is 'CLIParser', it can be overridden with the option
+	 * Default title is 'CLIParser', it can be overriden with the option
 	 * --title <Your:Title>
 	 *
-	 * @return Title
+	 * @return Title object
 	 */
-	protected function getTitle() {
-		$title = $this->getOption( 'title' ) ?: 'CLIParser';
-
+	protected function getTitle( ) {
+		$title =
+			$this->getOption( 'title' )
+			? $this->getOption( 'title' )
+			: 'CLIParser' ;
 		return Title::newFromText( $title );
+	}
+
+	/**
+	 * @param string $wikitext Wikitext to parse
+	 * @return ParserOutput
+	 */
+	protected function parse( $wikitext ) {
+		return $this->parser->parse(
+			$wikitext
+			, $this->getTitle()
+			, new ParserOptions()
+		);
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = CLIParser::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "CLIParser";
+require_once( RUN_MAINTENANCE_IF_MAIN );

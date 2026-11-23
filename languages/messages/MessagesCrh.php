@@ -1,10 +1,15 @@
 <?php
-/** Crimean Tatar (Qırımtatarca)
+/** Crimean Turkish (Qırımtatarca)
  *
+ * See MessagesQqq.php for message documentation incl. usage of parameters
+ * To improve a translation please visit http://translatewiki.net
+ *
+ * @ingroup Language
  * @file
- * @ingroup Languages
+ *
+ * @author Alessandro
  */
 
-$fallback = 'crh-latn, tr';
+$fallback = 'crh-latn';
 
 $linkTrail = '/^([a-zâçğıñöşüа-яёʺʹ“»]+)(.*)$/sDu';
