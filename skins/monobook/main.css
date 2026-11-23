@@ -407,7 +407,7 @@ li#pt-userpage,
 li#pt-anonuserpage,
 li#pt-login {
 	/* @embed */
-	background: url(user.gif) top left no-repeat;
+	background: url(user_icon.png) top left no-repeat;
 	padding-left: 20px;
 	text-transform: none;
 }

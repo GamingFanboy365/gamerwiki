@@ -339,7 +339,7 @@ $magicWords = array(
 	'defaultsort'            => array( 1,    'DEFAULTSORT:', 'DEFAULTSORTKEY:', 'DEFAULTCATEGORYSORT:' ),
 	'filepath'               => array( 0,    'FILEPATH:'              ),
 	'tag'                    => array( 0,    'tag'                    ),
-	'hiddencat'              => array( 1,    '__HIDDENCAT__'          ),
+	'hiddencat'              => array( 1,    '__METACAT__', '__HIDDENCAT__' ),
 	'expectunusedcategory'   => array( 1,    '__EXPECTUNUSEDCATEGORY__', '__EXPECTUNUSEDCATEGORIES__' ),
 	'pagesincategory'        => array( 1,    'PAGESINCATEGORY', 'PAGESINCAT' ),
 	'pagesize'               => array( 1,    'PAGESIZE'               ),
@@ -662,7 +662,7 @@ XHTML id names.
 'tog-nolangconversion'        => 'Disable variants conversion', # only translate this message to other languages if you have to change it
 'tog-ccmeonemails'            => 'Send me copies of emails I send to other users',
 'tog-diffonly'                => 'Do not show page content below diffs',
-'tog-showhiddencats'          => 'Show hidden categories',
+'tog-showhiddencats'          => 'Show meta categories',
 'tog-noconvertlink'           => 'Disable link title conversion', # only translate this message to other languages if you have to change it
 'tog-norollbackdiff'          => 'Omit diff after performing a rollback',
 
@@ -736,8 +736,8 @@ XHTML id names.
 'subcategories'                  => 'Subcategories',
 'category-media-header'          => 'Media in category "$1"',
 'category-empty'                 => "''This category currently contains no pages or media.''",
-'hidden-categories'              => '{{PLURAL:$1|Hidden category|Hidden categories}}',
-'hidden-category-category'       => 'Hidden categories',
+'hidden-categories'              => '{{PLURAL:$1|Meta category|Meta categories}}',
+'hidden-category-category'       => 'Meta categories',
 'expected-unused-category-category' => 'Expected unused categories',
 'category-subcat-count'          => '{{PLURAL:$2|This category has only the following subcategory.|This category has the following {{PLURAL:$1|subcategory|$1 subcategories}}, out of $2 total.}}',
 'category-subcat-count-limited'  => 'This category has the following {{PLURAL:$1|subcategory|$1 subcategories}}.',
@@ -929,7 +929,7 @@ See [[Special:Version|version page]].',
 'sort-ascending'               => 'Sort ascending',
 
 # Short words for each namespace, by default used in the namespace tab in monobook
-'nstab-main'      => 'Page',
+'nstab-main'      => 'Article',
 'nstab-user'      => 'User page',
 'nstab-media'     => 'Media page',
 'nstab-special'   => 'Special page',
@@ -1414,7 +1414,7 @@ The latest log entry is provided below for reference:",
 'templatesusedsection'             => '{{PLURAL:$1|Template|Templates}} used in this section:',
 'template-protected'               => '(protected)',
 'template-semiprotected'           => '(semi-protected)',
-'hiddencategories'                 => 'This page is a member of {{PLURAL:$1|1 hidden category|$1 hidden categories}}:',
+'hiddencategories'                 => 'This page is a member of {{PLURAL:$1|1 meta category|$1 meta categories}}:',
 'edittools'                        => '<!-- Text here will be shown below edit and upload forms. -->', # only translate this message to other languages if you have to change it
 'edittools-upload'                 => '-', # only translate this message to other languages if you have to change it
 'nocreatetitle'                    => 'Page creation limited',

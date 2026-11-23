@@ -644,11 +644,6 @@ class Preferences {
 			'label-message' => 'tog-nocache',
 			'section' => 'rendering/advancedrendering',
 		);
-		$defaultPreferences['showhiddencats'] = array(
-			'type' => 'toggle',
-			'section' => 'rendering/advancedrendering',
-			'label-message' => 'tog-showhiddencats'
-		);
 		$defaultPreferences['showjumplinks'] = array(
 			'type' => 'toggle',
 			'section' => 'rendering/advancedrendering',

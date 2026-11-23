@@ -65,6 +65,8 @@ h3 + dl, h4 + dl, h5 + dl {
 	li#pt-userpage,
 	li#pt-anonuserpage {
 		color: #606060;
+		/* @embed */
+		background: url(user_icon.png) top left no-repeat;
 		padding: 1px 0 2px 20px;
 		line-height: 20px;
 	}

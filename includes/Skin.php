@@ -420,15 +420,11 @@ abstract class Skin extends ContextSource {
 				. $colon . '<ul>' . $t . '</ul>' . '</div>';
 		}
 
-		# Hidden categories
+		# Meta categories (__METACAT__, formerly "hidden" categories).
+		# GamerWiki always shows them, on their own row below the content
+		# categories.
 		if ( isset( $allCats['hidden'] ) ) {
-			if ( $this->getUser()->getBoolOption( 'showhiddencats' ) ) {
-				$class = ' mw-hidden-cats-user-shown';
-			} elseif ( $this->getTitle()->getNamespace() == NS_CATEGORY ) {
-				$class = ' mw-hidden-cats-ns-shown';
-			} else {
-				$class = ' mw-hidden-cats-hidden';
-			}
+			$class = ' mw-hidden-cats-user-shown';
 
 			$s .= "<div id=\"mw-hidden-catlinks\" class=\"mw-hidden-catlinks$class\">" .
 				$this->msg( 'hidden-categories', count( $allCats['hidden'] ) )->escaped() .
@@ -491,12 +487,9 @@ abstract class Skin extends ContextSource {
 
 		$classes = 'catlinks';
 
-		// Check what we're showing
+		// Check what we're showing (meta categories are always shown)
 		$allCats = $out->getCategoryLinks();
-		$showHidden = $this->getUser()->getBoolOption( 'showhiddencats' ) ||
-						$this->getTitle()->getNamespace() == NS_CATEGORY;
-
-		if ( empty( $allCats['normal'] ) && !( !empty( $allCats['hidden'] ) && $showHidden ) ) {
+		if ( empty( $allCats['normal'] ) && empty( $allCats['hidden'] ) ) {
 			$classes .= ' catlinks-allhidden';
 		}
 
