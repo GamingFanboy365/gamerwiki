@@ -64,9 +64,11 @@ class CacheTime {
 	function getCacheExpiry() {
 		global $wgParserCacheExpireTime;
 
-		if ( $this->mCacheTime < 0 ) {
+		// Old-style marker for "not cachable" is -1. The default is '' and
+		// PHP 8 treats '' < 0 as true, so check for a number first.
+		if ( is_numeric( $this->mCacheTime ) && $this->mCacheTime < 0 ) {
 			return 0;
-		} // old-style marker for "not cachable"
+		}
 
 		$expire = $this->mCacheExpiry;
 
