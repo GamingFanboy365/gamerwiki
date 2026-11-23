@@ -63,6 +63,7 @@ class SpecialPageFactory {
 		'Prefixindex'               => 'SpecialPrefixindex',
 		'Categories'                => 'SpecialCategories',
 		'Disambiguations'           => 'DisambiguationsPage',
+		'DisambiguationPages'       => 'DisambiguationPagesPage',
 		'Listredirects'             => 'ListredirectsPage',
 
 		// Login/create account

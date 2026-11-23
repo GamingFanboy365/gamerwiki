@@ -47,7 +47,7 @@ class LonelyPagesPage extends PageQueryPage {
 	function isSyndicated() { return false; }
 
 	function getQueryInfo() {
-		return array (
+		return Disambiguation::excludeFromQuery( array (
 			'tables' => array ( 'page', 'pagelinks',
 					'templatelinks' ),
 			'fields' => array ( 'page_namespace AS namespace',
@@ -66,7 +66,7 @@ class LonelyPagesPage extends PageQueryPage {
 						'LEFT JOIN', array (
 						'tl_namespace = page_namespace',
 						'tl_title = page_title' ) ) )
-		);
+		) );
 	}
 
 	function getOrderFields() {

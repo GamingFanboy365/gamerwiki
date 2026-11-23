@@ -20,6 +20,7 @@ $wgQueryPages = array(
 	array( 'BrokenRedirectsPage',           'BrokenRedirects'               ),
 	array( 'DeadendPagesPage',              'Deadendpages'                  ),
 	array( 'DisambiguationsPage',           'Disambiguations'               ),
+	array( 'DisambiguationPagesPage',       'DisambiguationPages'           ),
 	array( 'DoubleRedirectsPage',           'DoubleRedirects'               ),
 	array( 'FileDuplicateSearchPage',       'FileDuplicateSearch'           ),
 	array( 'LinkSearchPage',                'LinkSearch'                    ),

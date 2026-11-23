@@ -184,6 +184,7 @@ class MagicWord {
 		'nonewsectionlink',
 		'hiddencat',
 		'expectunusedcategory',
+		'disambiguation',
 		'index',
 		'noindex',
 		'staticredirect',

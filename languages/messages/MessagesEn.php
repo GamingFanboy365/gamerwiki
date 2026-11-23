@@ -341,6 +341,7 @@ $magicWords = array(
 	'tag'                    => array( 0,    'tag'                    ),
 	'hiddencat'              => array( 1,    '__METACAT__', '__HIDDENCAT__' ),
 	'expectunusedcategory'   => array( 1,    '__EXPECTUNUSEDCATEGORY__', '__EXPECTUNUSEDCATEGORIES__' ),
+	'disambiguation'         => array( 1,    '__DISAMBIG__'           ),
 	'pagesincategory'        => array( 1,    'PAGESINCATEGORY', 'PAGESINCAT' ),
 	'pagesize'               => array( 1,    'PAGESIZE'               ),
 	'index'                  => array( 1,    '__INDEX__'              ),
@@ -384,7 +385,8 @@ $specialPageAliases = array(
 	'CreateAccount'             => array( 'CreateAccount' ),
 	'Deadendpages'              => array( 'DeadendPages' ),
 	'DeletedContributions'      => array( 'DeletedContributions' ),
-	'Disambiguations'           => array( 'Disambiguations' ),
+	'Disambiguations'           => array( 'Disambiguations', 'DisambiguationPageLinks' ),
+	'DisambiguationPages'       => array( 'DisambiguationPages' ),
 	'DoubleRedirects'           => array( 'DoubleRedirects' ),
 	'EditWatchlist'             => array( 'EditWatchlist' ),
 	'Emailuser'                 => array( 'EmailUser' ),
@@ -2481,7 +2483,10 @@ Remember to check for other links to the templates before deleting them.',
 'disambiguationspage'     => 'Template:disambig',
 'disambiguations-text'    => "The following pages contain at least one link to a '''disambiguation page'''.
 They may have to link to a more appropriate page instead.<br />
-A page is treated as a disambiguation page if it uses a template that is linked from [[MediaWiki:Disambiguationspage]].",
+A page is treated as a disambiguation page if it contains <nowiki>__DISAMBIG__</nowiki>, usually through a template such as <nowiki>{{Disambig}}</nowiki>.",
+'disambiguationpages'      => 'Disambiguation pages',
+'disambiguationpages-summary' => '', # do not translate or duplicate this message to other languages
+'disambiguationpages-text' => "The following pages are marked as '''disambiguation pages''' with <nowiki>__DISAMBIG__</nowiki>, usually through a template such as <nowiki>{{Disambig}}</nowiki>.",
 
 'doubleredirects'                   => 'Double redirects',
 'doubleredirects-summary'           => '', # do not translate or duplicate this message to other languages

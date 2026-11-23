@@ -333,6 +333,7 @@ class LinkHolderArray {
 		}
 		if ( count($linkcolour_ids) ) {
 			//pass an array of page_ids to an extension
+			Disambiguation::addLinkClasses( $linkcolour_ids, $colours );
 			wfRunHooks( 'GetLinkColours', array( $linkcolour_ids, &$colours ) );
 		}
 		wfProfileOut( __METHOD__.'-check' );
@@ -538,6 +539,7 @@ class LinkHolderArray {
 						$varCategories[$oldkey]=$vardbk;
 				}
 			}
+			Disambiguation::addLinkClasses( $linkcolour_ids, $colours );
 			wfRunHooks( 'GetLinkColours', array( $linkcolour_ids, &$colours ) );
 
 			// rebuild the categories in original order (if there are replacements)

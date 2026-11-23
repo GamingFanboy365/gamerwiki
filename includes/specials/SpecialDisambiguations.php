@@ -40,52 +40,14 @@ class DisambiguationsPage extends PageQueryPage {
 	}
 
 	function getQueryInfo() {
-		$dbr = wfGetDB( DB_SLAVE );
-		$dMsgText = $this->msg( 'disambiguationspage' )->inContentLanguage()->text();
-		$linkBatch = new LinkBatch;
-
-		# If the text can be treated as a title, use it verbatim.
-		# Otherwise, pull the titles from the links table
-		$dp = Title::newFromText($dMsgText);
-		if( $dp ) {
-			if( $dp->getNamespace() != NS_TEMPLATE ) {
-				# @todo FIXME: We assume the disambiguation message is a template but
-				# the page can potentially be from another namespace :/
-				wfDebug("Mediawiki:disambiguationspage message does not refer to a template!\n");
-			}
-			$linkBatch->addObj( $dp );
-		} else {
-				# Get all the templates linked from the Mediawiki:Disambiguationspage
-				$disPageObj = Title::makeTitleSafe( NS_MEDIAWIKI, 'disambiguationspage' );
-				$res = $dbr->select(
-					array('pagelinks', 'page'),
-					'pl_title',
-					array('page_id = pl_from',
-						'pl_namespace' => NS_TEMPLATE,
-						'page_namespace' => $disPageObj->getNamespace(),
-						'page_title' => $disPageObj->getDBkey()),
-					__METHOD__ );
-
-				foreach ( $res as $row ) {
-					$linkBatch->addObj( Title::makeTitle( NS_TEMPLATE, $row->pl_title ));
-				}
-		}
-		$set = $linkBatch->constructSet( 'tl', $dbr );
-		if( $set === false ) {
-			# We must always return a valid SQL query, but this way
-			# the DB will always quickly return an empty result
-			$set = 'FALSE';
-			wfDebug("Mediawiki:disambiguationspage message does not link to any templates!\n");
-		}
-
-		// @todo FIXME: What are pagelinks and p2 doing here?
+		// p1 is the disambiguation page, p2 a content page linking to it
 		return array (
-			'tables' => array( 'templatelinks', 'p1' => 'page', 'pagelinks', 'p2' => 'page' ),
+			'tables' => array( 'p1' => 'page', 'page_props', 'pagelinks', 'p2' => 'page' ),
 			'fields' => array( 'p1.page_namespace AS namespace',
 					'p1.page_title AS title',
 					'pl_from AS value' ),
-			'conds' => array( $set,
-					'p1.page_id = tl_from',
+			'conds' => array( 'pp_page = p1.page_id',
+					'pp_propname' => Disambiguation::PROP,
 					'pl_namespace = p1.page_namespace',
 					'pl_title = p1.page_title',
 					'p2.page_id = pl_from',
@@ -94,7 +56,7 @@ class DisambiguationsPage extends PageQueryPage {
 	}
 
 	function getOrderFields() {
-		return array( 'tl_namespace', 'tl_title', 'value' );
+		return array( 'p1.page_namespace', 'p1.page_title', 'pl_from' );
 	}
 
 	function sortDescending() {

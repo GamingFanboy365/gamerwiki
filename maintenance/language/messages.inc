@@ -1580,6 +1580,9 @@ $wgMessageStructure = array(
 		'disambiguations-summary',
 		'disambiguationspage',
 		'disambiguations-text',
+		'disambiguationpages',
+		'disambiguationpages-summary',
+		'disambiguationpages-text',
 	),
 	'doubleredirects' => array(
 		'doubleredirects',

@@ -38,15 +38,15 @@ class ShortPagesPage extends QueryPage {
 	}
 
 	function getQueryInfo() {
-		return array (
+		return Disambiguation::excludeFromQuery( array (
 			'tables' => array ( 'page' ),
 			'fields' => array ( 'page_namespace AS namespace',
 					'page_title AS title',
 					'page_len AS value' ),
 			'conds' => array ( 'page_namespace' => NS_MAIN,
 					'page_is_redirect' => 0 ),
-			'options' => array ( 'USE INDEX' => 'page_redirect_namespace_len' )
-		);
+			'options' => array ( 'USE INDEX' => array( 'page' => 'page_redirect_namespace_len' ) )
+		) );
 	}
 
 	function getOrderFields() {
