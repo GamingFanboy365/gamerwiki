@@ -371,7 +371,8 @@ class _DiffEngine {
 				}
 				$matches = $ymatches[$line];
 				reset( $matches );
-				while ( list( , $y ) = each( $matches ) ) {
+				while ( ( $y = current( $matches ) ) !== false ) {
+					next( $matches );
 					if ( empty( $this->in_seq[$y] ) ) {
 						$k = $this->_lcs_pos( $y );
 						assert( $k > 0 );
@@ -379,7 +380,8 @@ class _DiffEngine {
 						break;
 					}
 				}
-				while ( list ( , $y ) = each( $matches ) ) {
+				while ( ( $y = current( $matches ) ) !== false ) {
+					next( $matches );
 					if ( $y > $this->seq[$k -1] ) {
 						assert( $y < $this->seq[$k] );
 						// Optimization: this is a common case:
@@ -518,7 +520,7 @@ class _DiffEngine {
 		$i = 0;
 		$j = 0;
 
-		assert( 'sizeof($lines) == sizeof($changed)' );
+		assert( sizeof($lines) == sizeof($changed) );
 		$len = sizeof( $lines );
 		$other_len = sizeof( $other_changed );
 
@@ -539,7 +541,7 @@ class _DiffEngine {
 			}
 
 			while ( $i < $len && ! $changed[$i] ) {
-				assert( '$j < $other_len && ! $other_changed[$j]' );
+				assert( $j < $other_len && ! $other_changed[$j] );
 				$i++; $j++;
 				while ( $j < $other_len && $other_changed[$j] )
 				$j++;
@@ -574,11 +576,11 @@ class _DiffEngine {
 					while ( $start > 0 && $changed[$start - 1] ) {
 						$start--;
 					}
-					assert( '$j > 0' );
+					assert( $j > 0 );
 					while ( $other_changed[--$j] ) {
 						continue;
 					}
-					assert( '$j >= 0 && !$other_changed[$j]' );
+					assert( $j >= 0 && !$other_changed[$j] );
 				}
 
 				/*
@@ -602,7 +604,7 @@ class _DiffEngine {
 						$i++;
 					}
 
-					assert( '$j < $other_len && ! $other_changed[$j]' );
+					assert( $j < $other_len && ! $other_changed[$j] );
 					$j++;
 					if ( $j < $other_len && $other_changed[$j] ) {
 						$corresponding = $i;
@@ -620,11 +622,11 @@ class _DiffEngine {
 			while ( $corresponding < $i ) {
 				$changed[--$start] = 1;
 				$changed[--$i] = 0;
-				assert( '$j > 0' );
+				assert( $j > 0 );
 				while ( $other_changed[--$j] ) {
 					continue;
 				}
-				assert( '$j >= 0 && !$other_changed[$j]' );
+				assert( $j >= 0 && !$other_changed[$j] );
 			}
 		}
 		wfProfileOut( __METHOD__ );

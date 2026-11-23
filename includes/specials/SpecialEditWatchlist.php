@@ -521,7 +521,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 	 * @return HTMLForm
 	 */
 	protected function getRawForm(){
-		$titles = implode( $this->getWatchlist(), "\n" );
+		$titles = implode( "\n", $this->getWatchlist() );
 		$fields = array(
 			'Titles' => array(
 				'type' => 'textarea',

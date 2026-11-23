@@ -100,9 +100,8 @@ function wfArrayDiff2_cmp( $a, $b ) {
 	} elseif ( count( $a ) !== count( $b ) ) {
 		return count( $a ) < count( $b ) ? -1 : 1;
 	} else {
-		reset( $a );
-		reset( $b );
-		while( ( list( , $valueA ) = each( $a ) ) && ( list( , $valueB ) = each( $b ) ) ) {
+		foreach ( array_map( null, array_values( $a ), array_values( $b ) ) as $pair ) {
+			list( $valueA, $valueB ) = $pair;
 			$cmp = strcmp( $valueA, $valueB );
 			if ( $cmp !== 0 ) {
 				return $cmp;
@@ -2230,6 +2229,43 @@ function wfSuppressWarnings( $end = false ) {
  */
 function wfRestoreWarnings() {
 	wfSuppressWarnings( true );
+}
+
+/**
+ * Block libxml from loading external entities and DTDs (XXE protection).
+ *
+ * Replacement for libxml_disable_entity_loader(), which is deprecated as of
+ * PHP 8.0. Note that XMLReader::SUBST_ENTITIES / LIBXML_NOENT re-enable
+ * external entity loading even on libxml >= 2.9, so callers that substitute
+ * entities must still wrap reads in this.
+ *
+ * Calls nest; pass the return value to wfRestoreXmlEntityLoader().
+ *
+ * @return int nesting depth token
+ */
+function wfDisableXmlEntityLoader() {
+	global $wgXmlEntityLoaderDepth;
+	if ( !$wgXmlEntityLoaderDepth ) {
+		$wgXmlEntityLoaderDepth = 0;
+		libxml_set_external_entity_loader( function () {
+			return null;
+		} );
+	}
+	return $wgXmlEntityLoaderDepth++;
+}
+
+/**
+ * Undo one wfDisableXmlEntityLoader() call.
+ *
+ * @param $token int value returned by wfDisableXmlEntityLoader()
+ */
+function wfRestoreXmlEntityLoader( $token ) {
+	global $wgXmlEntityLoaderDepth;
+	$wgXmlEntityLoaderDepth = $token;
+	if ( $wgXmlEntityLoaderDepth <= 0 ) {
+		$wgXmlEntityLoaderDepth = 0;
+		libxml_set_external_entity_loader( null );
+	}
 }
 
 # Autodetect, convert and provide timestamps of various types

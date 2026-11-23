@@ -479,7 +479,7 @@ class MWExceptionHandler {
 	/**
 	 * Report an exception to the user
 	 */
-	protected static function report( Exception $e ) {
+	protected static function report( Throwable $e ) {
 		global $wgShowExceptionDetails;
 
 		$cmdLine = MWException::isCommandLine();
@@ -488,7 +488,7 @@ class MWExceptionHandler {
 			try {
 				// Try and show the exception prettily, with the normal skin infrastructure
 				$e->report();
-			} catch ( Exception $e2 ) {
+			} catch ( Throwable $e2 ) {
 				// Exception occurred from within exception handler
 				// Show a simpler error message for the original exception,
 				// don't try to invoke report()
@@ -572,7 +572,7 @@ class MWExceptionHandler {
 		if ( $wgFullyInitialised ) {
 			try {
 				wfLogProfilingData(); // uses $wgRequest, hence the $wgFullyInitialised condition
-			} catch ( Exception $e ) {}
+			} catch ( Throwable $e ) {}
 		}
 
 		// Exit value should be nonzero for the benefit of shell jobs

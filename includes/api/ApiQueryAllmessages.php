@@ -138,7 +138,7 @@ class ApiQueryAllmessages extends ApiQueryBase {
 			if ( !$skip ) {
 				$a = array( 'name' => $message );
 				$args = array();
-				if ( isset( $params['args'] ) && count( $params['args'] ) != 0 ) {
+				if ( isset( $params['args'] ) && count( (array)$params['args'] ) != 0 ) {
 					$args = $params['args'];
 				}
 

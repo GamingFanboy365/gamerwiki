@@ -610,7 +610,7 @@ class CoreParserFunctions {
 		$restrictions = $parser->mTitle->getRestrictions( strtolower( $type ) );
 		# Title::getRestrictions returns an array, its possible it may have
 		# multiple values in the future
-		return implode( $restrictions, ',' );
+		return implode( ',', $restrictions );
 	}
 
 	/**

@@ -90,7 +90,7 @@ class ApiQueryAllUsers extends ApiQueryBase {
 			$this->dieUsage( 'group and excludegroup cannot be used together', 'group-excludegroup' );
 		}
 
-		if ( !is_null( $params['group'] ) && count( $params['group'] ) ) {
+		if ( !is_null( $params['group'] ) && count( (array)$params['group'] ) ) {
 			$useIndex = false;
 			// Filter only users that belong to a given group
 			$this->addTables( 'user_groups', 'ug1' );
@@ -98,12 +98,12 @@ class ApiQueryAllUsers extends ApiQueryBase {
 					'ug1.ug_group' => $params['group'] ) ) ) );
 		}
 
-		if ( !is_null( $params['excludegroup'] ) && count( $params['excludegroup'] ) ) {
+		if ( !is_null( $params['excludegroup'] ) && count( (array)$params['excludegroup'] ) ) {
 			$useIndex = false;
 			// Filter only users don't belong to a given group
 			$this->addTables( 'user_groups', 'ug1' );
 
-			if ( count( $params['excludegroup'] ) == 1 ) {
+			if ( count( (array)$params['excludegroup'] ) == 1 ) {
 				$exclude = array( 'ug1.ug_group' => $params['excludegroup'][0] );
 			} else {
 				$exclude = array( $db->makeList( array( 'ug1.ug_group' => $params['excludegroup'] ), LIST_OR ) );

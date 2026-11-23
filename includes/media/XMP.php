@@ -448,7 +448,7 @@ class XMPReader {
 			LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET
 		);
 
-		$oldDisable = libxml_disable_entity_loader( true );
+		$oldDisable = wfDisableXmlEntityLoader();
 		$reader->setParserProperty( XMLReader::SUBST_ENTITIES, false );
 
 		// Even with LIBXML_NOWARNING set, XMLReader::read gives a warning
@@ -468,7 +468,7 @@ class XMPReader {
 			}
 		}
 		wfRestoreWarnings();
-		libxml_disable_entity_loader( $oldDisable );
+		wfRestoreXmlEntityLoader( $oldDisable );
 
 		if ( !is_null( $result ) ) {
 			return $result;

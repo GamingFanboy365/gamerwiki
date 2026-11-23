@@ -121,7 +121,7 @@ class XCFHandler extends BitmapHandler {
 		$metadata['channels'] = null;
 		$metadata['bits'] = 8;  # Always 8-bits per color
 
-		assert( '7 == count($metadata); # return array must contains 7 elements just like getimagesize() return' );
+		assert( 7 == count( $metadata ) ); // must contain 7 elements, like getimagesize()
 
 		return $metadata;
 	}

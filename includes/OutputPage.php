@@ -2549,13 +2549,14 @@ $templates
 	protected function makeResourceLoaderLink( $modules, $only, $useESI = false, array $extraQuery = array(), $loadCall = false ) {
 		global $wgResourceLoaderUseESI;
 
+		$modules = (array)$modules;
 		if ( !count( $modules ) ) {
 			return '';
 		}
 
 		if ( count( $modules ) > 1 ) {
 			// Remove duplicate module requests
-			$modules = array_unique( (array) $modules );
+			$modules = array_unique( $modules );
 			// Sort module names so requests are more uniform
 			sort( $modules );
 

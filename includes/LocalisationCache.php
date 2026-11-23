@@ -456,9 +456,10 @@ class LocalisationCache {
 		ini_set( 'apc.cache_by_default', $_apcEnabled );
 
 		if ( $_fileType == 'core' || $_fileType == 'extension' ) {
-			$data = compact( self::$allKeys );
+			// Only the keys this file actually defines (compact() warns on the rest in PHP 8)
+			$data = array_intersect_key( get_defined_vars(), array_flip( self::$allKeys ) );
 		} elseif ( $_fileType == 'aliases' ) {
-			$data = compact( 'aliases' );
+			$data = isset( $aliases ) ? array( 'aliases' => $aliases ) : array();
 		} else {
 			throw new MWException( __METHOD__.": Invalid file type: $_fileType" );
 		}

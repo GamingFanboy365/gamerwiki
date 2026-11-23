@@ -108,7 +108,7 @@ class XmlTypeCheck {
 			// Couldn't open the XML
 			$this->wellFormed = false;
 		} else {
-			$oldDisable = libxml_disable_entity_loader( true );
+			$oldDisable = wfDisableXmlEntityLoader();
 			$reader->setParserProperty( XMLReader::SUBST_ENTITIES, true );
 			try {
 				$this->validate( $reader );
@@ -117,11 +117,11 @@ class XmlTypeCheck {
 				// thing. Maybe just an external entity refernce.
 				$this->wellFormed = false;
 				$reader->close();
-				libxml_disable_entity_loader( $oldDisable );
+				wfRestoreXmlEntityLoader( $oldDisable );
 				throw $e;
 			}
 			$reader->close();
-			libxml_disable_entity_loader( $oldDisable );
+			wfRestoreXmlEntityLoader( $oldDisable );
 		}
 	}
 

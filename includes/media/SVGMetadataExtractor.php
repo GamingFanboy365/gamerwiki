@@ -73,10 +73,10 @@ class SVGReader {
 		// against large recursive entity expansions so this is not as
 		// insecure as it might appear to be. However, it is still extremely
 		// insecure. It's necessary to wrap any read() calls with
-		// libxml_disable_entity_loader() to avoid arbitrary local file
+		// wfDisableXmlEntityLoader() to avoid arbitrary local file
 		// inclusion, or even arbitrary code execution if the expect
 		// extension is installed (bug 46859).
-		$oldDisable = libxml_disable_entity_loader( true );
+		$oldDisable = wfDisableXmlEntityLoader();
 		$this->reader->setParserProperty( XMLReader::SUBST_ENTITIES, true );
 
 		$this->metadata['width'] = self::DEFAULT_WIDTH;
@@ -90,11 +90,11 @@ class SVGReader {
 			$this->read();
 		} catch( Exception $e ) {
 			wfRestoreWarnings();
-			libxml_disable_entity_loader( $oldDisable );
+			wfRestoreXmlEntityLoader( $oldDisable );
 			throw $e;
 		}
 		wfRestoreWarnings();
-		libxml_disable_entity_loader( $oldDisable );
+		wfRestoreXmlEntityLoader( $oldDisable );
 	}
 
 	/**

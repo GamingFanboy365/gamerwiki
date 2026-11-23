@@ -135,7 +135,6 @@ $wgAutoloadLocalClasses = array(
 	'LCStore_CDB' => 'includes/LocalisationCache.php',
 	'LCStore_DB' => 'includes/LocalisationCache.php',
 	'LCStore_Null' => 'includes/LocalisationCache.php',
-	'LegacyTemplate' => 'includes/SkinLegacy.php',
 	'License' => 'includes/Licenses.php',
 	'Licenses' => 'includes/Licenses.php',
 	'Linker' => 'includes/Linker.php',
@@ -197,7 +196,6 @@ $wgAutoloadLocalClasses = array(
 	'SiteStatsInit' => 'includes/SiteStats.php',
 	'SiteStatsUpdate' => 'includes/SiteStats.php',
 	'Skin' => 'includes/Skin.php',
-	'SkinLegacy' => 'includes/SkinLegacy.php',
 	'SkinTemplate' => 'includes/SkinTemplate.php',
 	'SpecialCreateAccount' => 'includes/SpecialPage.php',
 	'SpecialListAdmins' => 'includes/SpecialPage.php',
@@ -1023,12 +1021,4 @@ class AutoLoader {
 	}
 }
 
-if ( function_exists( 'spl_autoload_register' ) ) {
-	spl_autoload_register( array( 'AutoLoader', 'autoload' ) );
-} else {
-	function __autoload( $class ) {
-		AutoLoader::autoload( $class );
-	}
-
-	ini_set( 'unserialize_callback_func', '__autoload' );
-}
+spl_autoload_register( array( 'AutoLoader', 'autoload' ) );

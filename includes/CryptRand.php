@@ -261,132 +261,16 @@ class MWCryptRand {
 	 * @see self::generate()
 	 */
 	public function realGenerate( $bytes, $forceStrong = false ) {
-		wfProfileIn( __METHOD__ );
-
-		wfDebug( __METHOD__ . ": Generating cryptographic random bytes for " . wfGetAllCallers( 5 ) . "\n" );
-
-		$bytes = floor( $bytes );
-		static $buffer = '';
-		if ( is_null( $this->strong ) ) {
-			// Set strength to false initially until we know what source data is coming from
-			$this->strong = true;
+		// GamerWiki: PHP 7+ ships a CSPRNG (getrandom()/arc4random/CryptGenRandom
+		// under the hood), so the old mcrypt/openssl/urandom/clock-drift
+		// fallback chain is no longer needed. random_bytes() throws rather
+		// than ever returning weak data.
+		$this->strong = true;
+		$bytes = (int)floor( $bytes );
+		if ( $bytes < 1 ) {
+			return '';
 		}
-
-		if ( strlen( $buffer ) < $bytes ) {
-			// If available make use of mcrypt_create_iv URANDOM source to generate randomness
-			// On unix-like systems this reads from /dev/urandom but does it without any buffering
-			// and bypasses openbasdir restrictions so it's preferable to reading directly
-			// On Windows starting in PHP 5.3.0 Windows' native CryptGenRandom is used to generate
-			// entropy so this is also preferable to just trying to read urandom because it may work
-			// on Windows systems as well.
-			if ( function_exists( 'mcrypt_create_iv' ) ) {
-				wfProfileIn( __METHOD__ . '-mcrypt' );
-				$rem = $bytes - strlen( $buffer );
-				$iv = mcrypt_create_iv( $rem, MCRYPT_DEV_URANDOM );
-				if ( $iv === false ) {
-					wfDebug( __METHOD__ . ": mcrypt_create_iv returned false.\n" );
-				} else {
-					$buffer .= $iv;
-					wfDebug( __METHOD__ . ": mcrypt_create_iv generated " . strlen( $iv ) . " bytes of randomness.\n" );
-				}
-				wfProfileOut( __METHOD__ . '-mcrypt' );
-			}
-		}
-
-		if ( strlen( $buffer ) < $bytes ) {
-			// If available make use of openssl's random_pesudo_bytes method to attempt to generate randomness.
-			// However don't do this on Windows with PHP < 5.3.4 due to a bug:
-			// http://stackoverflow.com/questions/1940168/openssl-random-pseudo-bytes-is-slow-php
-			if ( function_exists( 'openssl_random_pseudo_bytes' )
-				&& ( !wfIsWindows() || version_compare( PHP_VERSION, '5.3.4', '>=' ) )
-			) {
-				wfProfileIn( __METHOD__ . '-openssl' );
-				$rem = $bytes - strlen( $buffer );
-				$openssl_bytes = openssl_random_pseudo_bytes( $rem, $openssl_strong );
-				if ( $openssl_bytes === false ) {
-					wfDebug( __METHOD__ . ": openssl_random_pseudo_bytes returned false.\n" );
-				} else {
-					$buffer .= $openssl_bytes;
-					wfDebug( __METHOD__ . ": openssl_random_pseudo_bytes generated " . strlen( $openssl_bytes ) . " bytes of " . ( $openssl_strong ? "strong" : "weak" ) . " randomness.\n" );
-				}
-				if ( strlen( $buffer ) >= $bytes ) {
-					// openssl tells us if the random source was strong, if some of our data was generated
-					// using it use it's say on whether the randomness is strong
-					$this->strong = !!$openssl_strong;
-				}
-				wfProfileOut( __METHOD__ . '-openssl' );
-			}
-		}
-
-		// Only read from urandom if we can control the buffer size or were passed forceStrong
-		if ( strlen( $buffer ) < $bytes && ( function_exists( 'stream_set_read_buffer' ) || $forceStrong ) ) {
-			wfProfileIn( __METHOD__ . '-fopen-urandom' );
-			$rem = $bytes - strlen( $buffer );
-			if ( !function_exists( 'stream_set_read_buffer' ) && $forceStrong ) {
-				wfDebug( __METHOD__ . ": Was forced to read from /dev/urandom without control over the buffer size.\n" );
-			}
-			// /dev/urandom is generally considered the best possible commonly
-			// available random source, and is available on most *nix systems.
-			wfSuppressWarnings();
-			$urandom = fopen( "/dev/urandom", "rb" );
-			wfRestoreWarnings();
-
-			// Attempt to read all our random data from urandom
-			// php's fread always does buffered reads based on the stream's chunk_size
-			// so in reality it will usually read more than the amount of data we're
-			// asked for and not storing that risks depleting the system's random pool.
-			// If stream_set_read_buffer is available set the chunk_size to the amount
-			// of data we need. Otherwise read 8k, php's default chunk_size.
-			if ( $urandom ) {
-				// php's default chunk_size is 8k
-				$chunk_size = 1024 * 8;
-				if ( function_exists( 'stream_set_read_buffer' ) ) {
-					// If possible set the chunk_size to the amount of data we need
-					stream_set_read_buffer( $urandom, $rem );
-					$chunk_size = $rem;
-				}
-				$random_bytes = fread( $urandom, max( $chunk_size, $rem ) );
-				$buffer .= $random_bytes;
-				fclose( $urandom );
-				wfDebug( __METHOD__ . ": /dev/urandom generated " . strlen( $random_bytes ) . " bytes of randomness.\n" );
-				if ( strlen( $buffer ) >= $bytes ) {
-					// urandom is always strong, set to true if all our data was generated using it
-					$this->strong = true;
-				}
-			} else {
-				wfDebug( __METHOD__ . ": /dev/urandom could not be opened.\n" );
-			}
-			wfProfileOut( __METHOD__ . '-fopen-urandom' );
-		}
-
-		// If we cannot use or generate enough data from a secure source
-		// use this loop to generate a good set of pseudo random data.
-		// This works by initializing a random state using a pile of unstable data
-		// and continually shoving it through a hash along with a variable salt.
-		// We hash the random state with more salt to avoid the state from leaking
-		// out and being used to predict the /randomness/ that follows.
-		if ( strlen( $buffer ) < $bytes ) {
-			wfDebug( __METHOD__ . ": Falling back to using a pseudo random state to generate randomness.\n" ); 
-		}
-		while ( strlen( $buffer ) < $bytes ) {
-			wfProfileIn( __METHOD__ . '-fallback' );
-			$buffer .= $this->hmac( $this->randomState(), mt_rand() );
-			// This code is never really cryptographically strong, if we use it
-			// at all, then set strong to false.
-			$this->strong = false;
-			wfProfileOut( __METHOD__ . '-fallback' );
-		}
-
-		// Once the buffer has been filled up with enough random data to fulfill
-		// the request shift off enough data to handle the request and leave the
-		// unused portion left inside the buffer for the next request for random data
-		$generated = substr( $buffer, 0, $bytes );
-		$buffer = substr( $buffer, $bytes );
-
-		wfDebug( __METHOD__ . ": " . strlen( $buffer ) . " bytes of randomness leftover in the buffer.\n" );
-
-		wfProfileOut( __METHOD__ );
-		return $generated;
+		return random_bytes( $bytes );
 	}
 
 	/**

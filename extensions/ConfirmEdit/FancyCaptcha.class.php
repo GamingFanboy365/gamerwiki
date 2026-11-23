@@ -209,7 +209,7 @@ class FancyCaptcha extends SimpleCaptcha {
 		$file = $wgCaptchaDirectory;
 		$file .= DIRECTORY_SEPARATOR;
 		for ( $i = 0; $i < $wgCaptchaDirectoryLevels; $i++ ) {
-			$file .= $hash { $i } ;
+			$file .= $hash[$i];
 			$file .= DIRECTORY_SEPARATOR;
 		}
 		$file .= "image_{$salt}_{$hash}.png";

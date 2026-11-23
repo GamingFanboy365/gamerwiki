@@ -85,7 +85,7 @@ class ApiQueryWatchlistRaw extends ApiQueryGeneratorBase {
 		}
 
 		// Don't ORDER BY wl_namespace if it's constant in the WHERE clause
-		if ( count( $params['namespace'] ) == 1 ) {
+		if ( count( (array)$params['namespace'] ) == 1 ) {
 			$this->addOption( 'ORDER BY', 'wl_title' );
 		} else {
 			$this->addOption( 'ORDER BY', 'wl_namespace, wl_title' );

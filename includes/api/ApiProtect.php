@@ -49,11 +49,11 @@ class ApiProtect extends ApiBase {
 		}
 
 		$expiry = (array)$params['expiry'];
-		if ( count( $expiry ) != count( $params['protections'] ) ) {
+		if ( count( $expiry ) != count( (array)$params['protections'] ) ) {
 			if ( count( $expiry ) == 1 ) {
-				$expiry = array_fill( 0, count( $params['protections'] ), $expiry[0] );
+				$expiry = array_fill( 0, count( (array)$params['protections'] ), $expiry[0] );
 			} else {
-				$this->dieUsageMsg( array( 'toofewexpiries', count( $expiry ), count( $params['protections'] ) ) );
+				$this->dieUsageMsg( array( 'toofewexpiries', count( $expiry ), count( (array)$params['protections'] ) ) );
 			}
 		}
 

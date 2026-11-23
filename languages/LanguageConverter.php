@@ -670,7 +670,7 @@ class LanguageConverter {
 							$warningDone = true;
 						}
 						$startPos += 2;
-						continue;
+						break; // was "continue", which targets the switch
 					}
 					// Recursively parse another rule
 					$inner .= $this->recursiveConvertRule( $text, $variant, $startPos, $depth + 1 );

@@ -162,7 +162,7 @@ class ApiParamInfo extends ApiBase {
 					if ( !is_array( $v ) ) {
 						$item['description'] = $v;
 					} else {
-						$item['description'] = implode( $v, "\n" );
+						$item['description'] = implode( "\n", $v );
 					}
 					$retval['examples'] .= $item['description'] . ' ' . $k;
 					$result->setContent( $item, $k );
