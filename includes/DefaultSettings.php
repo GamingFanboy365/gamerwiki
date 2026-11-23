@@ -2747,9 +2747,10 @@ $wgMetaNamespaceTalk = false;
 #     102 => "Aide",
 #     103 => "Discussion_Aide"
 # );
-# GamerWiki: namespaces common on game wikis are built in. Gadget, TimedText
-# and Module are reserved so XML imports from newer wikis keep their pages
-# out of the main namespace, even without the matching extensions.
+# GamerWiki: Forum and Gallery are built in. Gadget, TimedText and Module
+# are reserved so XML imports from newer wikis keep their pages out of the
+# main namespace, even without the matching extensions.
+# To add your own, use $wgGamerWikiNamespaces below (one line each).
 $wgExtraNamespaces = array(
 	110 => 'Forum',
 	111 => 'Forum_talk',
@@ -2763,11 +2764,19 @@ $wgExtraNamespaces = array(
 	2303 => 'Gadget_definition_talk',
 	3000 => 'Gallery',
 	3001 => 'Gallery_talk',
-	3002 => 'Bootleg',
-	3003 => 'Bootleg_talk',
-	3004 => 'Fanon',
-	3005 => 'Fanon_talk',
 );
+
+/**
+ * GamerWiki: the easy way to add namespaces. One line per namespace:
+ *
+ *     $wgGamerWikiNamespaces[3002] = 'Fanon';
+ *     $wgGamerWikiNamespaces[3004] = 'Bootleg';
+ *
+ * Each gets a matching talk namespace (3003 'Fanon_talk', ...) and
+ * subpages. Use an even number of 3000 or more that is not taken yet, and
+ * never change a number once pages exist in that namespace.
+ */
+$wgGamerWikiNamespaces = array();
 
 /**
  * Same as above, but for namespaces with gender distinction.
@@ -2902,11 +2911,8 @@ $wgNamespacesWithSubpages = array(
 	# GamerWiki extra namespaces
 	110  => true, # Forum
 	111  => true,
+	3000 => true, # Gallery
 	3001 => true,
-	3002 => true, # Bootleg
-	3003 => true,
-	3004 => true, # Fanon
-	3005 => true,
 );
 
 /**

@@ -62,6 +62,25 @@ if ( $wgLogo === false ) $wgLogo = "$wgStylePath/common/images/wiki.png";
 
 if ( $wgFavicon === false ) $wgFavicon = "$wgScriptPath/favicon.ico";
 
+# GamerWiki: one-line namespaces, see $wgGamerWikiNamespaces
+foreach ( $wgGamerWikiNamespaces as $gwNsId => $gwNsName ) {
+	if ( !is_int( $gwNsId ) || $gwNsId < 100 || $gwNsId % 2 ) {
+		// Too early for MediaWiki's error page; say plainly what to fix.
+		if ( PHP_SAPI !== 'cli' ) {
+			header( 'Content-Type: text/plain; charset=utf-8', true, 500 );
+		}
+		echo "LocalSettings.php: \$wgGamerWikiNamespaces[$gwNsId] = '$gwNsName' needs an even number " .
+			"of 100 or more, for example \$wgGamerWikiNamespaces[3002] = '$gwNsName';\n";
+		exit( 1 );
+	}
+	$gwNsName = str_replace( ' ', '_', $gwNsName );
+	$wgExtraNamespaces[$gwNsId] = $gwNsName;
+	$wgExtraNamespaces[$gwNsId + 1] = "{$gwNsName}_talk";
+	$wgNamespacesWithSubpages[$gwNsId] = true;
+	$wgNamespacesWithSubpages[$gwNsId + 1] = true;
+}
+unset( $gwNsId, $gwNsName );
+
 if ( $wgUploadPath === false ) $wgUploadPath = "$wgScriptPath/images";
 if ( $wgUploadDirectory === false ) $wgUploadDirectory = "$IP/images";
 
