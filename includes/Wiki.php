@@ -414,9 +414,22 @@ class MediaWiki {
 	 * Do a job from the job queue
 	 */
 	private function doJobs() {
-		global $wgJobRunRate;
+		global $wgJobRunRate, $wgGamerWikiJobTimeAfterSave;
 
-		if ( $wgJobRunRate <= 0 || wfReadOnly() ) {
+		if ( wfReadOnly() ) {
+			return;
+		}
+
+		// GamerWiki: after a change, finish the queue so lists are current
+		if ( $wgGamerWikiJobTimeAfterSave > 0 && $this->context->getRequest()->wasPosted() ) {
+			$deadline = microtime( true ) + $wgGamerWikiJobTimeAfterSave;
+			while ( microtime( true ) < $deadline && false != ( $job = Job::pop() ) ) {
+				$this->runJob( $job );
+			}
+			return;
+		}
+
+		if ( $wgJobRunRate <= 0 ) {
 			return;
 		}
 		if ( $wgJobRunRate < 1 ) {
@@ -430,18 +443,26 @@ class MediaWiki {
 		}
 
 		while ( $n-- && false != ( $job = Job::pop() ) ) {
-			$output = $job->toString() . "\n";
-			$t = - microtime( true );
-			$success = $job->run();
-			$t += microtime( true );
-			$t = round( $t * 1000 );
-			if ( !$success ) {
-				$output .= "Error: " . $job->getLastError() . ", Time: $t ms\n";
-			} else {
-				$output .= "Success, Time: $t ms\n";
-			}
-			wfDebugLog( 'jobqueue', $output );
+			$this->runJob( $job );
 		}
+	}
+
+	/**
+	 * Run one job and log the result
+	 * @param $job Job
+	 */
+	private function runJob( Job $job ) {
+		$output = $job->toString() . "\n";
+		$t = - microtime( true );
+		$success = $job->run();
+		$t += microtime( true );
+		$t = round( $t * 1000 );
+		if ( !$success ) {
+			$output .= "Error: " . $job->getLastError() . ", Time: $t ms\n";
+		} else {
+			$output .= "Success, Time: $t ms\n";
+		}
+		wfDebugLog( 'jobqueue', $output );
 	}
 
 	/**
