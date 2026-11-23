@@ -1692,8 +1692,11 @@ $wgLocalisationCacheConf = array(
 	'manualRecache' => false,
 );
 
-/** Allow client-side caching of pages */
-$wgCachePages = true;
+/**
+ * Allow client-side caching of pages.
+ * GamerWiki: off, so reloading a page always shows its current state.
+ */
+$wgCachePages = false;
 
 /**
  * Set this to current time to invalidate all prior cached pages. Affects both
@@ -1742,8 +1745,13 @@ $wgFileCacheDepth = 2;
  * This can provide a significant speedup for medium to large pages,
  * so you probably want to keep it on. Extensions that conflict with the
  * parser cache should disable the cache on a per-page basis instead.
+ *
+ * GamerWiki: off by default, so every view renders the page fresh, as if
+ * it had just been purged: template changes, {{CURRENTYEAR}}, {{#time:}},
+ * {{#ifexist:}} and red links are never stale. This is cheap on a local
+ * wiki; set it to true (and $wgCachePages too) for a busy public site.
  */
-$wgEnableParserCache = true;
+$wgEnableParserCache = false;
 
 /**
  * Append a configured value to the parser cache and the sitenotice key so
@@ -5704,6 +5712,16 @@ $wgHTTPProxy = false;
  * be run periodically.
  */
 $wgJobRunRate = 1;
+
+/**
+ * GamerWiki: after a save, move, delete, upload or import (any POST
+ * request), keep running queued jobs until the queue is empty, for at most
+ * this many seconds. Jobs update categories, "What links here" and similar
+ * lists for pages that use a changed template, so those lists are current
+ * by the time the next page loads. Whatever is left over continues at
+ * $wgJobRunRate per page view. Set to 0 to turn this off.
+ */
+$wgGamerWikiJobTimeAfterSave = 30;
 
 /**
  * Number of rows to update per job
