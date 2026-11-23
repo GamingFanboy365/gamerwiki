@@ -35,7 +35,11 @@ class WebResponse {
 	 * @param $http_response_code null|int Forces the HTTP response code to the specified value.
 	 */
 	public function header( $string, $replace = true, $http_response_code = null ) {
-		header( $string, $replace, $http_response_code );
+		if ( $http_response_code === null ) {
+			header( $string, $replace );
+		} else {
+			header( $string, $replace, $http_response_code );
+		}
 	}
 
 	/**
@@ -69,13 +73,7 @@ class WebResponse {
 					$domain,
 					$wgCookieSecure,
 					$httpOnlySafe ) ) . '"' );
-		setcookie( $prefix . $name,
-			$value,
-			$expire,
-			$wgCookiePath,
-			$domain,
-			$wgCookieSecure,
-			$httpOnlySafe );
+		setcookie( $prefix . $name, $value, wfCookieOptions( $expire, $domain ) );
 	}
 }
 

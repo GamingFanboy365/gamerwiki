@@ -2232,6 +2232,29 @@ function wfRestoreWarnings() {
 }
 
 /**
+ * Options array for setcookie() / session_set_cookie_params(), including
+ * the SameSite attribute ($wgCookieSameSite) that PHP 7.3+ supports.
+ *
+ * @param $expire int Expiry timestamp (0 for a session cookie)
+ * @param $domain string Cookie domain
+ * @return array
+ */
+function wfCookieOptions( $expire, $domain ) {
+	global $wgCookiePath, $wgCookieSecure, $wgCookieHttpOnly, $wgCookieSameSite;
+	$options = array(
+		'expires' => $expire,
+		'path' => $wgCookiePath,
+		'domain' => $domain,
+		'secure' => (bool)$wgCookieSecure,
+		'httponly' => wfHttpOnlySafe() && $wgCookieHttpOnly,
+	);
+	if ( $wgCookieSameSite ) {
+		$options['samesite'] = $wgCookieSameSite;
+	}
+	return $options;
+}
+
+/**
  * Block libxml from loading external entities and DTDs (XXE protection).
  *
  * Replacement for libxml_disable_entity_loader(), which is deprecated as of
@@ -3402,7 +3425,10 @@ function wfSetupSession( $sessionId = false ) {
 				$wgCookieDomain,
 				$wgCookieSecure,
 				$httpOnlySafe ) ) . '"' );
-	session_set_cookie_params( 0, $wgCookiePath, $wgCookieDomain, $wgCookieSecure, $httpOnlySafe );
+	$sessionCookie = wfCookieOptions( 0, $wgCookieDomain );
+	unset( $sessionCookie['expires'] );
+	$sessionCookie['lifetime'] = 0;
+	session_set_cookie_params( $sessionCookie );
 	session_cache_limiter( 'private, must-revalidate' );
 	if ( $sessionId ) {
 		session_id( $sessionId );

@@ -23,44 +23,15 @@
  * @file
  */
 
-# Protect against register_globals
-# This must be done before any globals are set by the code
-if ( ini_get( 'register_globals' ) ) {
-	if ( isset( $_REQUEST['GLOBALS'] ) || isset( $_FILES['GLOBALS'] ) ) {
-		die( '<a href="http://www.hardened-php.net/globals-problem">$GLOBALS overwrite vulnerability</a>');
-	}
-	$verboten = array(
-		'GLOBALS',
-		'_SERVER',
-		'HTTP_SERVER_VARS',
-		'_GET',
-		'HTTP_GET_VARS',
-		'_POST',
-		'HTTP_POST_VARS',
-		'_COOKIE',
-		'HTTP_COOKIE_VARS',
-		'_FILES',
-		'HTTP_POST_FILES',
-		'_ENV',
-		'HTTP_ENV_VARS',
-		'_REQUEST',
-		'_SESSION',
-		'HTTP_SESSION_VARS'
-	);
-	foreach ( $_REQUEST as $name => $value ) {
-		if( in_array( $name, $verboten ) ) {
-			header( "HTTP/1.1 500 Internal Server Error" );
-			echo "register_globals security paranoia: trying to overwrite superglobals, aborting.";
-			die( -1 );
-		}
-		unset( $GLOBALS[$name] );
-	}
-}
+# GamerWiki: 1.19's code predates PHP 8 and triggers many E_DEPRECATED
+# notices. They are harmless, but must never be printed into pages if
+# php.ini has display_errors on.
+error_reporting( error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED );
 
-# bug 15461: Make IE8 turn off content sniffing. Everbody else should ignore this
-# We're adding it here so that it's *always* set, even for alternate entry
-# points and when $wgOut gets disabled or overridden.
+# Always set, even for alternate entry points and when $wgOut is disabled.
 header( 'X-Content-Type-Options: nosniff' );
+# GamerWiki: don't leak local wiki URLs to external sites via Referer.
+header( 'Referrer-Policy: same-origin' );
 
 $wgRequestTime = microtime(true);
 # getrusage() does not exist on the Microsoft Windows platforms, catching this

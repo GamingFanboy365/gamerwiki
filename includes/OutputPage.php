@@ -1948,6 +1948,7 @@ class OutputPage extends ContextSource {
 	 */
 	public function output() {
 		global $wgLanguageCode, $wgDebugRedirects, $wgMimeType, $wgVaryOnXFP;
+		global $wgContentSecurityPolicy;
 
 		if( $this->mDoNothing ) {
 			return;
@@ -1956,6 +1957,10 @@ class OutputPage extends ContextSource {
 		wfProfileIn( __METHOD__ );
 
 		$response = $this->getRequest()->response();
+
+		if ( $wgContentSecurityPolicy ) {
+			$response->header( 'Content-Security-Policy: ' . $wgContentSecurityPolicy );
+		}
 
 		if ( $this->mRedirect != '' ) {
 			# Standards require redirect URLs to be absolute

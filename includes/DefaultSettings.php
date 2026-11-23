@@ -4023,6 +4023,33 @@ $wgCookiePrefix = false;
 $wgCookieHttpOnly = true;
 
 /**
+ * SameSite attribute for all cookies: 'Lax', 'Strict', 'None' or false to
+ * omit it. GamerWiki defaults to 'Lax' so that other websites open in the
+ * same browser cannot submit forms to the wiki with your login cookies
+ * (cross-site request forgery), while links into the wiki keep working.
+ */
+$wgCookieSameSite = 'Lax';
+
+/**
+ * Content-Security-Policy header sent with every HTML page, or false to send
+ * none. The GamerWiki default only lets scripts, styles and frames come from
+ * the wiki itself, so even a markup bug cannot pull in code from elsewhere.
+ * Inline scripts stay allowed because 1.19's ResourceLoader relies on them.
+ * Images may come from anywhere because $wgAllowExternalImages is on.
+ */
+$wgContentSecurityPolicy = "default-src 'self'; " .
+	"script-src 'self' 'unsafe-inline'; " .
+	"style-src 'self' 'unsafe-inline'; " .
+	"img-src * data:; " .
+	"media-src 'self' data:; " .
+	"font-src 'self' data:; " .
+	"connect-src 'self'; " .
+	"object-src 'none'; " .
+	"base-uri 'self'; " .
+	"form-action 'self'; " .
+	"frame-ancestors 'self'";
+
+/**
  * If the requesting browser matches a regex in this blacklist, we won't
  * send it cookies with HttpOnly mode, even if $wgCookieHttpOnly is on.
  */

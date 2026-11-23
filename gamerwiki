@@ -1,0 +1,75 @@
+#!/bin/sh
+# GamerWiki launcher.
+#
+#   ./gamerwiki install "My Wiki" AdminName   create a new wiki (SQLite, in ./data)
+#   ./gamerwiki serve [port]                  run it at http://127.0.0.1:<port>/ (default 8080)
+#
+# The server only listens on 127.0.0.1, so nothing else on your network can
+# reach the wiki. Needs PHP 8.1 or newer with the pdo_sqlite extension.
+
+set -e
+IP=$(cd "$(dirname "$0")" && pwd)
+PORT_DEFAULT=8080
+
+die() { echo "gamerwiki: $*" >&2; exit 1; }
+
+check_php() {
+	command -v php >/dev/null 2>&1 || die "PHP is not installed (need PHP 8.1+ with pdo_sqlite)."
+	php -r 'exit(PHP_VERSION_ID >= 80100 ? 0 : 1);' || die "PHP 8.1 or newer is required (found $(php -r 'echo PHP_VERSION;'))."
+	php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);' || die "The PHP pdo_sqlite extension is required."
+}
+
+# PHP settings for every run: no errors in pages, room for big uploads.
+php_ini() {
+	echo "-d display_errors=0 -d log_errors=1 -d error_log=$IP/cache/php-errors.log \
+		-d upload_max_filesize=2G -d post_max_size=2G -d memory_limit=512M \
+		-d expose_php=0 -d session.use_strict_mode=1"
+}
+
+cmd_serve() {
+	check_php
+	port=${1:-$PORT_DEFAULT}
+	case "$port" in *[!0-9]*|'') die "port must be a number" ;; esac
+	if [ ! -f "$IP/LocalSettings.php" ]; then
+		echo "No wiki set up yet. Run:  ./gamerwiki install \"Wiki name\" AdminName"
+		echo "or open http://127.0.0.1:$port/mw-config/ for the web installer."
+	fi
+	echo "GamerWiki running at http://127.0.0.1:$port/  (Ctrl+C to stop)"
+	# shellcheck disable=SC2046
+	exec php $(php_ini) -S "127.0.0.1:$port" -t "$IP" "$IP/maintenance/gamerwiki-router.php"
+}
+
+cmd_install() {
+	check_php
+	[ $# -ge 2 ] || die 'usage: ./gamerwiki install "Wiki name" AdminName [port]'
+	name=$1 admin=$2 port=${3:-$PORT_DEFAULT}
+	[ -f "$IP/LocalSettings.php" ] && die "LocalSettings.php already exists; this wiki is already installed."
+	dbname=$(printf '%s' "$name" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9')
+	[ -n "$dbname" ] || dbname=gamerwiki
+	mkdir -p "$IP/data"
+	chmod 700 "$IP/data"
+
+	printf 'Password for %s: ' "$admin"
+	stty -echo 2>/dev/null || true; read -r pass; stty echo 2>/dev/null || true; echo
+	[ -n "$pass" ] || die "a password is required"
+
+	# shellcheck disable=SC2046
+	php $(php_ini) "$IP/maintenance/install.php" \
+		--dbtype sqlite --dbpath "$IP/data" --dbname "$dbname" \
+		--server "http://127.0.0.1:$port" --scriptpath "" \
+		--pass "$pass" "$name" "$admin"
+
+	# Work on any port and on both 127.0.0.1 and localhost. Safe because the
+	# router only answers loopback Host headers.
+	sed -i.bak 's|^\$wgServer *=.*|$wgServer = WebRequest::detectServer();|' "$IP/LocalSettings.php"
+	rm -f "$IP/LocalSettings.php.bak"
+	chmod 600 "$IP/LocalSettings.php"
+	echo
+	echo "Done. Start the wiki with:  ./gamerwiki serve $port"
+}
+
+case "${1:-}" in
+	serve) shift; cmd_serve "$@" ;;
+	install) shift; cmd_install "$@" ;;
+	*) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac
