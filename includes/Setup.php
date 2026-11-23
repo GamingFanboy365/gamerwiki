@@ -92,11 +92,13 @@ if ( isset( $wgFooterIcons['copyright'] ) &&
 	}
 }
 
-if ( isset( $wgFooterIcons['poweredby'] ) &&
-	isset( $wgFooterIcons['poweredby']['mediawiki'] ) &&
-	$wgFooterIcons['poweredby']['mediawiki']['src'] === null )
-{
-	$wgFooterIcons['poweredby']['mediawiki']['src'] = "$wgStylePath/common/images/poweredby_mediawiki_88x31.png";
+if ( isset( $wgFooterIcons['poweredby']['gamerwiki'] ) ) {
+	if ( $wgFooterIcons['poweredby']['gamerwiki']['src'] === null ) {
+		$wgFooterIcons['poweredby']['gamerwiki']['src'] = "$wgStylePath/common/images/poweredby_gamerwiki_88x31.png";
+	}
+	if ( $wgFooterIcons['poweredby']['gamerwiki']['url'] === null ) {
+		$wgFooterIcons['poweredby']['gamerwiki']['url'] = "$wgScript?title=Special:Version";
+	}
 }
 
 /**

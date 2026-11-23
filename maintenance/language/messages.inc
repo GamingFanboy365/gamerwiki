@@ -3450,6 +3450,7 @@ $wgMessageStructure = array(
 		'version-license',
 		'version-poweredby-credits',
 		'version-poweredby-others',
+		'version-gamerwiki',
 		'version-license-info',
 		'version-software',
 		'version-software-product',

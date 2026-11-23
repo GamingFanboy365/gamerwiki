@@ -3023,7 +3023,7 @@ $templates
 
 		$tags[] = Html::element( 'meta', array(
 			'name' => 'generator',
-			'content' => "MediaWiki $wgVersion",
+			'content' => "GamerWiki {$GLOBALS['wgGamerWikiVersion']} (MediaWiki $wgVersion)",
 		) );
 
 		$p = "{$this->mIndexPolicy},{$this->mFollowPolicy}";

@@ -12,8 +12,8 @@ $messages = array();
 
 /** English */
 $messages['en'] = array(
-	'config-desc'                     => 'The installer for MediaWiki',
-	'config-title'                    => 'MediaWiki $1 installation',
+	'config-desc'                     => 'The installer for GamerWiki',
+	'config-title'                    => 'GamerWiki installation (MediaWiki $1)',
 	'config-information'              => 'Information',
 	'config-localsettings-upgrade'    => "A <code>LocalSettings.php</code> file has been detected.
 To upgrade this installation, please enter the value of <code>\$wgUpgradeKey</code> in the box below.
@@ -46,7 +46,7 @@ Check your php.ini and make sure <code>session.save_path</code> is set to an app
 	'config-back'                     => '← Back',
 	'config-continue'                 => 'Continue →',
 	'config-page-language'            => 'Language',
-	'config-page-welcome'             => 'Welcome to MediaWiki!',
+	'config-page-welcome'             => 'Welcome to GamerWiki!',
 	'config-page-dbconnect'           => 'Connect to database',
 	'config-page-upgrade'             => 'Upgrade existing installation',
 	'config-page-dbsettings'          => 'Database settings',
@@ -550,13 +550,13 @@ $3
 When that has been done, you can '''[$2 enter your wiki]'''.",
 	'config-download-localsettings' => 'Download LocalSettings.php',
 	'config-help' => 'help',
-	'mainpagetext'      => "'''MediaWiki has been successfully installed.'''",
-	'mainpagedocfooter' => "Consult the [//meta.wikimedia.org/wiki/Help:Contents User's Guide] for information on using the wiki software.
+	'mainpagetext'      => "'''GamerWiki has been installed.'''",
+	'mainpagedocfooter' => "This is the Main Page of your new wiki. Click \"edit\" at the top to replace this text with a welcome for your readers.
 
 == Getting started ==
-* [//www.mediawiki.org/wiki/Manual:Configuration_settings Configuration settings list]
-* [//www.mediawiki.org/wiki/Manual:FAQ MediaWiki FAQ]
-* [https://lists.wikimedia.org/mailman/listinfo/mediawiki-announce MediaWiki release mailing list]",
+New pages are made by linking to them: write <nowiki>[[Super Mario Bros.]]</nowiki> on any page, save it, then follow the red link. Templates live in the Template namespace and are used with <nowiki>{{Name}}</nowiki>, and the [[Special:SpecialPages|special pages]] list the wiki's tools, such as [[Special:WantedPages|wanted pages]], [[Special:UncategorizedPages|uncategorized pages]] and [[Special:Import|XML import]].
+
+The look of the whole wiki can be changed on [[MediaWiki:Common.css]] and [[MediaWiki:Monobook.css]], and the sidebar on [[MediaWiki:Sidebar]].",
 );
 
 /** Message documentation (Message documentation)

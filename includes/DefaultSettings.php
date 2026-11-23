@@ -35,6 +35,13 @@ $wgConf = new SiteConfiguration;
 /** MediaWiki version number */
 $wgVersion = '1.19.24';
 
+/**
+ * GamerWiki version. GamerWiki is MediaWiki 1.19.24 under a new name;
+ * $wgVersion above stays at the MediaWiki version it is based on, so
+ * extensions that check it keep working.
+ */
+$wgGamerWikiVersion = '0.1';
+
 /** Name of the site. It must be changed in LocalSettings.php */
 $wgSitename = 'MediaWiki';
 
@@ -2481,10 +2488,10 @@ $wgFooterIcons = array(
 		"copyright" => array(), // placeholder for the built in copyright icon
 	),
 	"poweredby" => array(
-		"mediawiki" => array(
-			"src" => null, // Defaults to "$wgStylePath/common/images/poweredby_mediawiki_88x31.png"
-			"url" => "//www.mediawiki.org/",
-			"alt" => "Powered by MediaWiki",
+		"gamerwiki" => array(
+			"src" => null, // Defaults to "$wgStylePath/common/images/poweredby_gamerwiki_88x31.png"
+			"url" => null, // Defaults to this wiki's Special:Version
+			"alt" => "Powered by GamerWiki",
 		)
 	),
 );

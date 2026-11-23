@@ -4570,6 +4570,7 @@ You can also [[Special:EditWatchlist|use the standard editor]].',
 'version-license'               => 'License',
 'version-poweredby-credits'     => "This wiki is powered by '''[https://www.mediawiki.org/ MediaWiki]''', copyright © 2001-$1 $2.",
 'version-poweredby-others'      => '[{{SERVER}}{{SCRIPTPATH}}/CREDITS others]',
+'version-gamerwiki'             => "'''GamerWiki''' is a fork of MediaWiki 1.19, the wiki software of the mid-2000s, brought up to date to run on modern PHP. It keeps the classic MonoBook look and plain HTML pages, and adds a handful of later quality-of-life features.",
 'version-license-info'          => 'MediaWiki is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
 MediaWiki is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.

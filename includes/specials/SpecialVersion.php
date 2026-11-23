@@ -84,6 +84,7 @@ class SpecialVersion extends SpecialPage {
 		// This text is always left-to-right.
 		$ret .= '<div>';
 		$ret .= "__NOTOC__
+		" . wfMsg( 'version-gamerwiki' ) . "\n
 		" . self::getCopyrightAndAuthorList() . "\n
 		" . wfMsg( 'version-license-info' );
 		$ret .= '</div>';
@@ -125,8 +126,10 @@ class SpecialVersion extends SpecialPage {
 		// Put the software in an array of form 'name' => 'version'. All messages should
 		// be loaded here, so feel free to use wfMsg*() in the 'name'. Raw HTML or wikimarkup
 		// can be used.
+		global $wgGamerWikiVersion;
 		$software = array();
-		$software['[https://www.mediawiki.org/ MediaWiki]'] = self::getVersionLinked();
+		$software['GamerWiki'] = $wgGamerWikiVersion;
+		$software['[https://www.mediawiki.org/ MediaWiki] (base)'] = self::getVersionLinked();
 		$software['[http://www.php.net/ PHP]'] = phpversion() . " (" . php_sapi_name() . ")";
 		$software[$dbr->getSoftwareLink()] = $dbr->getServerInfo();
 
