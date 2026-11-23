@@ -1493,7 +1493,8 @@ The reason given by $3 is ''$2''",
 'page_last'              => 'last',
 'histlegend'             => "Diff selection: Mark the radio boxes of the revisions to compare and hit enter or the button at the bottom.<br />
 Legend: '''({{int:cur}})''' = difference with latest revision, '''({{int:last}})''' = difference with preceding revision, '''{{int:minoreditletter}}''' = minor edit.",
-'history-fieldset-title' => 'Browse history',
+'history-fieldset-title' => 'Search for revisions',
+'historyaction-submit'   => 'Show',
 'history-show-deleted'   => 'Deleted only',
 'history_copyright'      => '-', # do not translate or duplicate this message to other languages
 'histfirst'              => 'oldest',

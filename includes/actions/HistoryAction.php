@@ -163,7 +163,7 @@ class HistoryAction extends FormlessAction {
 			Xml::dateMenu( $year, $month ) . '&#160;' .
 			( $tagSelector ? ( implode( '&#160;', $tagSelector ) . '&#160;' ) : '' ) .
 			$checkDeleted .
-			Xml::submitButton( $this->msg( 'allpagessubmit' )->text() ) . "\n" .
+			Xml::submitButton( $this->msg( 'historyaction-submit' )->text() ) . "\n" .
 			'</fieldset></form>'
 		);
 

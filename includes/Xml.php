@@ -179,7 +179,7 @@ class Xml {
 			$encYear = '';
 		}
 		return Xml::label( wfMsg( 'year' ), 'year' ) . ' '.
-			Xml::input( 'year', 4, $encYear, array('id' => 'year', 'maxlength' => 4) ) . ' '.
+			Xml::input( 'year', 7, $encYear, array( 'id' => 'year', 'maxlength' => 4, 'type' => 'number' ) ) . ' '.
 			Xml::label( wfMsg( 'month' ), 'month' ) . ' '.
 			Xml::monthSelector( $encMonth, -1 );
 	}
