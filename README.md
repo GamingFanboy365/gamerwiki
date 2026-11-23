@@ -44,6 +44,8 @@ Export the pages from the old wiki with Special:Export (or `dumpBackup.php`), th
 
 **Built-in extensions.** ParserFunctions (including string functions), Cite, CharInsert, ImageMap, InputBox, Poem, Interwiki, Nuke, Renameuser, ReplaceText, SyntaxHighlight (GeSHi), PdfHandler, DPLforum, Variables, Loops and WikiSEO are always on. See `extensions/README` for versions and licenses.
 
+**Always fresh.** Every page view renders the page from its current wikitext, as if it had just been purged. Template changes, page counts, forum lists and dates are never stale. After each save, GamerWiki also finishes the background job queue, so categories and "What links here" are up to date by the next page load. A busy public wiki can turn caching back on with `$wgEnableParserCache = true; $wgCachePages = true;`.
+
 **Game-wiki defaults.** Uploads are on (png, gif, jpg, svg, pdf, ogv, oga, up to 2 GB). There are Forum and Gallery namespaces, American dates and 200px thumbnails.
 
 To add a namespace, one line in `LocalSettings.php` does it, talk namespace and subpages included:
