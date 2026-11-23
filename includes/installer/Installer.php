@@ -178,7 +178,7 @@ abstract class Installer {
 		'_RightsProfile' => 'wiki',
 		'_LicenseCode' => 'none',
 		'_CCDone' => false,
-		'_Extensions' => array( 'ParserFunctions' ), # GamerWiki: on by default
+		'_Extensions' => array(),
 		'_MemCachedServers' => '',
 		'_UpgradeKeySupplied' => false,
 		'_ExistingDBSettings' => false,
@@ -1279,8 +1279,11 @@ abstract class Installer {
 		$extDir = $this->getVar( 'IP' ) . '/extensions';
 		$dh = opendir( $extDir );
 
+		// GamerWiki: built into core, only a compatibility stub remains
+		$builtIn = array( 'ParserFunctions' );
+
 		while ( ( $file = readdir( $dh ) ) !== false ) {
-			if( !is_dir( "$extDir/$file" ) ) {
+			if( !is_dir( "$extDir/$file" ) || in_array( $file, $builtIn ) ) {
 				continue;
 			}
 			if( file_exists( "$extDir/$file/$file.php" ) ) {

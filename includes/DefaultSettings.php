@@ -5831,6 +5831,14 @@ $wgDBtestuser = ''; //db user that has permission to create and drop the test da
 $wgDBtestpassword = '';
 
 /**
+ * GamerWiki: ParserFunctions ({{#if:}}, {{#ifeq:}}, {{#switch:}}, {{#expr:}},
+ * {{#time:}}, {{#ifexist:}}, string functions, ...) is part of the core
+ * software. Its $wgPF* settings are defined here and can be changed in
+ * LocalSettings.php like any other setting.
+ */
+require_once( "$IP/includes/ParserFunctions/ParserFunctions.php" );
+
+/**
  * For really cool vim folding this needs to be at the end:
  * vim: foldmarker=@{,@} foldmethod=marker
  * @}
