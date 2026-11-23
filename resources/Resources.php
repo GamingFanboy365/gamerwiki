@@ -22,6 +22,7 @@ return array(
 			'common/commonContent.css' => array( 'media' => 'screen' ),
 			'common/commonInterface.css' => array( 'media' => 'screen' ),
 			'monobook/main.css' => array( 'media' => 'screen' ),
+			'monobook/gamerwiki.css' => array( 'media' => 'screen' ),
 		),
 		'remoteBasePath' => $GLOBALS['wgStylePath'],
 		'localBasePath' => $GLOBALS['wgStyleDirectory'],

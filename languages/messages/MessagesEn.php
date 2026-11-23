@@ -608,11 +608,11 @@ XHTML id it should only appear once and include characters that are legal
 XHTML id names.
 */
 'sidebar' => '
+* SEARCH
 * navigation
 ** mainpage|mainpage-description
 ** recentchanges-url|recentchanges
 ** randompage-url|randompage
-* SEARCH
 * TOOLBOX
 * LANGUAGES', # do not translate or duplicate this message to other languages
 
