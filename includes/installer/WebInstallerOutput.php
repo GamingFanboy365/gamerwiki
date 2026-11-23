@@ -88,7 +88,7 @@ class WebInstallerOutput {
 	}
 
 	/**
-	 * Get the raw vector CSS, flipping if needed
+	 * Get the raw MonoBook CSS, flipping if needed
 	 * @param $dir String 'ltr' or 'rtl'
 	 * @return String
 	 */
@@ -102,11 +102,12 @@ class WebInstallerOutput {
 		// before the last '/' in each of the strings.
 		$cssFileNames = array(
 
-			// Basically the "skins.vector" ResourceLoader module styles
+			// The "skins.monobook" ResourceLoader module styles
 			'common/commonElements.css',
 			'common/commonContent.css',
 			'common/commonInterface.css',
-			'vector/screen.css',
+			'monobook/main.css',
+			'monobook/gamerwiki.css',
 
 			// mw-config specific
 			'common/config.css',
@@ -119,9 +120,10 @@ class WebInstallerOutput {
 			$fullCssFileName = "$skinDir/$cssFileName";
 			$cssFileContents = file_get_contents( $fullCssFileName );
 			if ( $cssFileContents ) {
-				preg_match( "/^(\w+)\//", $cssFileName, $match );
-				$skinName = $match[1];
-				$css .= str_replace( 'images/', "../skins/$skinName/images/", $cssFileContents );
+				// Point relative url()s at the skin directory; the CSS is
+				// served from mw-config/index.php?css=...
+				$css .= CSSMin::remap( $cssFileContents, dirname( $fullCssFileName ),
+					'../skins/' . dirname( $cssFileName ), false );
 			} else {
 				$css .= "/** Your webserver cannot read $fullCssFileName. Please check file permissions. */";
 			}
@@ -228,13 +230,12 @@ class WebInstallerOutput {
 	<?php echo Html::linkedScript( '../skins/common/config.js' ) . "\n"; ?>
 </head>
 
-<?php echo Html::openElement( 'body', array( 'class' => $this->getDir() ) ) . "\n"; ?>
-<div id="mw-page-base"></div>
-<div id="mw-head-base"></div>
-<div id="content">
+<?php echo Html::openElement( 'body', array( 'class' => 'mediawiki skin-monobook ' . $this->getDir() ) ) . "\n"; ?>
+<div id="globalWrapper">
+<div id="column-content"><div id="content">
+<h1 class="firstHeading"><?php $this->outputTitle(); ?></h1>
 <div id="bodyContent">
 
-<h1><?php $this->outputTitle(); ?></h1>
 <?php
 	}
 
@@ -247,20 +248,22 @@ class WebInstallerOutput {
 		}
 ?>
 
-</div></div>
+</div></div></div>
 
-
-<div id="mw-panel">
-	<div class="portal" id="p-logo">
-	  <a style="background-image: url(../skins/common/images/mediawiki.png);"
-		href="http://www.mediawiki.org/"
-		title="Main Page"></a>
+<div id="column-one">
+	<div class="portlet" id="p-logo">
+		<a style="background-image: url(../skins/common/images/wiki.png);"
+			href="index.php" title="GamerWiki installation"></a>
 	</div>
-	<div class="portal"><div class="body">
+	<div class="portlet" id="p-help">
+		<h3>GamerWiki</h3>
+		<div class="pBody">
 <?php
 	echo $this->parent->parse( wfMsgNoTrans( 'config-sidebar' ), true );
 ?>
-	</div></div>
+		</div>
+	</div>
+</div>
 </div>
 
 </body>
