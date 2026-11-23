@@ -3,6 +3,8 @@
 #
 #   ./gamerwiki install "My Wiki" AdminName   create a new wiki (SQLite, in ./data)
 #   ./gamerwiki serve [port]                  run it at http://127.0.0.1:<port>/ (default 8080)
+#   ./gamerwiki update                        back up, get the latest GamerWiki, update the database
+#   ./gamerwiki backup                        copy the database to data/backups/
 #
 # The server only listens on 127.0.0.1, so nothing else on your network can
 # reach the wiki. Needs PHP 8.1 or newer with the pdo_sqlite extension.
@@ -68,8 +70,42 @@ cmd_install() {
 	echo "Done. Start the wiki with:  ./gamerwiki serve $port"
 }
 
+cmd_backup() {
+	check_php
+	[ -f "$IP/LocalSettings.php" ] || die "no wiki installed here yet."
+	mkdir -p "$IP/data/backups"
+	chmod 700 "$IP/data/backups"
+	file="$IP/data/backups/wiki-$(date +%Y%m%d-%H%M%S).sqlite"
+	# sqlite.php copies the database safely even while the wiki is running
+	# shellcheck disable=SC2046
+	php $(php_ini) "$IP/maintenance/sqlite.php" --backup-to "$file" >/dev/null \
+		|| die "backup failed; nothing was changed."
+	echo "Database backed up to $file"
+	echo "(Uploaded files in images/ are not touched by updates.)"
+}
+
+cmd_update() {
+	check_php
+	[ -f "$IP/LocalSettings.php" ] || die "no wiki installed here yet; run ./gamerwiki install first."
+	cmd_backup
+	if [ -d "$IP/.git" ] && command -v git >/dev/null 2>&1; then
+		echo "Getting the latest GamerWiki..."
+		git -C "$IP" pull --ff-only || die "could not update the code (local changes?). Your wiki is unchanged."
+	else
+		echo "Not a git checkout: put the new GamerWiki files in place first, then run this again."
+	fi
+	echo "Updating the database..."
+	# shellcheck disable=SC2046
+	php $(php_ini) "$IP/maintenance/update.php" --quick || die "database update failed; restore the backup above if needed."
+	# shellcheck disable=SC2046
+	php $(php_ini) "$IP/maintenance/rebuildLocalisationCache.php" --quiet >/dev/null 2>&1 || true
+	echo "Update complete."
+}
+
 case "${1:-}" in
 	serve) shift; cmd_serve "$@" ;;
 	install) shift; cmd_install "$@" ;;
-	*) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+	update) shift; cmd_update "$@" ;;
+	backup) shift; cmd_backup "$@" ;;
+	*) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
