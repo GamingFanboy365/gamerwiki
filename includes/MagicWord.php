@@ -768,7 +768,13 @@ class MagicWordArray {
 	 * @return array
 	 */
 	function parseMatch( $m ) {
-		foreach ( $m as $key => $value ) {
+		// preg_match() gives, in order: the named group for the matched
+		// synonym, its numeric duplicate, then the parameter capture. The
+		// parameter is therefore two entries after the first non-empty named
+		// group. (This used to be done with each()/next() pointer tricks.)
+		$keys = array_keys( $m );
+		foreach ( $keys as $pos => $key ) {
+			$value = $m[$key];
 			if ( $key === 0 || $value === '' ) {
 				continue;
 			}
@@ -779,7 +785,7 @@ class MagicWordArray {
 				throw new MWException( __METHOD__ . ': bad parameter name' );
 			}
 			list( /* $synIndex */, $magicName ) = $parts;
-			$paramValue = next( $m );
+			$paramValue = isset( $keys[$pos + 2] ) ? $m[$keys[$pos + 2]] : false;
 			return array( $magicName, $paramValue );
 		}
 		// This shouldn't happen either
