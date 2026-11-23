@@ -710,6 +710,15 @@ $wgSVGConverters = array(
 	);
 /** Pick a converter defined in $wgSVGConverters */
 $wgSVGConverter = 'ImageMagick';
+
+/**
+ * GamerWiki: show SVG files as they are, scaled by the browser, instead of
+ * converting them to PNG. Needs no rsvg/ImageMagick, keeps vector art sharp,
+ * and is safe because browsers never run scripts in an SVG shown through an
+ * <img> tag. Set to false to rasterize with $wgSVGConverter instead.
+ * (Same idea as the NativeSvgHandler extension, written for GamerWiki.)
+ */
+$wgSVGNativeRendering = true;
 /** If not in the executable PATH, specify the SVG converter path. */
 $wgSVGConverterPath = '';
 /** Don't scale a SVG larger than this */

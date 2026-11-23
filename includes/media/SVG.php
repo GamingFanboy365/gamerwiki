@@ -15,8 +15,10 @@ class SvgHandler extends ImageHandler {
 	const SVG_METADATA_VERSION = 2;
 
 	function isEnabled() {
-		global $wgSVGConverters, $wgSVGConverter;
-		if ( !isset( $wgSVGConverters[$wgSVGConverter] ) ) {
+		global $wgSVGConverters, $wgSVGConverter, $wgSVGNativeRendering;
+		if ( $wgSVGNativeRendering ) {
+			return true;
+		} elseif ( !isset( $wgSVGConverters[$wgSVGConverter] ) ) {
 			wfDebug( "\$wgSVGConverter is invalid, disabling SVG rendering.\n" );
 			return false;
 		} else {
@@ -25,7 +27,8 @@ class SvgHandler extends ImageHandler {
 	}
 
 	function mustRender( $file ) {
-		return true;
+		global $wgSVGNativeRendering;
+		return !$wgSVGNativeRendering;
 	}
 
 	function isVectorized( $file ) {
@@ -94,6 +97,13 @@ class SvgHandler extends ImageHandler {
 		$physicalWidth = $params['physicalWidth'];
 		$physicalHeight = $params['physicalHeight'];
 		$srcPath = $image->getLocalRefPath();
+
+		// GamerWiki: let the browser draw the SVG itself at the requested
+		// size. Browsers never run scripts in an SVG shown through <img>.
+		global $wgSVGNativeRendering;
+		if ( $wgSVGNativeRendering ) {
+			return new ThumbnailImage( $image, $image->getURL(), $clientWidth, $clientHeight, $srcPath );
+		}
 
 		if ( $flags & self::TRANSFORM_LATER ) {
 			return new ThumbnailImage( $image, $dstUrl, $clientWidth, $clientHeight, $dstPath );
@@ -195,6 +205,10 @@ class SvgHandler extends ImageHandler {
 	}
 
 	function getThumbType( $ext, $mime, $params = null ) {
+		global $wgSVGNativeRendering;
+		if ( $wgSVGNativeRendering ) {
+			return array( 'svg', 'image/svg+xml' );
+		}
 		return array( 'png', 'image/png' );
 	}
 
