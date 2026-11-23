@@ -1279,8 +1279,12 @@ abstract class Installer {
 		$extDir = $this->getVar( 'IP' ) . '/extensions';
 		$dh = opendir( $extDir );
 
-		// GamerWiki: built into core, only a compatibility stub remains
-		$builtIn = array( 'ParserFunctions' );
+		// GamerWiki: bundled extensions are always loaded; don't offer them
+		global $wgGamerWikiBundledExtensions;
+		$builtIn = array();
+		foreach ( (array)$wgGamerWikiBundledExtensions as $file ) {
+			$builtIn[] = dirname( $file );
+		}
 
 		while ( ( $file = readdir( $dh ) ) !== false ) {
 			if( !is_dir( "$extDir/$file" ) || in_array( $file, $builtIn ) ) {

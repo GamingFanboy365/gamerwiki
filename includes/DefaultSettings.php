@@ -5837,12 +5837,55 @@ $wgDBtestuser = ''; //db user that has permission to create and drop the test da
 $wgDBtestpassword = '';
 
 /**
- * GamerWiki: ParserFunctions ({{#if:}}, {{#ifeq:}}, {{#switch:}}, {{#expr:}},
- * {{#time:}}, {{#ifexist:}}, string functions, ...) is part of the core
- * software. Its $wgPF* settings are defined here and can be changed in
- * LocalSettings.php like any other setting.
+ * GamerWiki: extensions that are part of the core software. They are always
+ * loaded, so they need no line in LocalSettings.php, and their settings
+ * (e.g. $wgPFEnableStringFunctions) can still be changed there. These are
+ * the 2012-era versions made for MediaWiki 1.19, without their optional
+ * JavaScript.
+ *
+ *  ParserFunctions        {{#if:}}, {{#ifeq:}}, {{#switch:}}, {{#expr:}}, {{#time:}}, string functions
+ *  Cite                   <ref> and <references />, plus Special:Cite ("Cite this page")
+ *  CharInsert             <charinsert> for clickable special characters in MediaWiki:Edittools
+ *  ImageMap               <imagemap> clickable images
+ *  InputBox               <inputbox> search and create-page boxes
+ *  Poem                   <poem>
+ *  Interwiki              Special:Interwiki to edit interwiki prefixes
+ *  Nuke                   Special:Nuke to mass-delete a user's pages
+ *  Renameuser             Special:RenameUser
+ *  ReplaceText            Special:ReplaceText, wiki-wide search and replace
+ *  SyntaxHighlight_GeSHi  <syntaxhighlight> / <source> code highlighting
+ *  PdfHandler             PDF thumbnails (needs Ghostscript installed)
+ *  DPLforum               <forum> lists for the Forum namespace
+ *  Variables              {{#vardefine:}}, {{#var:}}
+ *  Loops                  {{#while:}}, {{#loop:}}, {{#forargs:}}
+ *  WikiSEO                {{#seo:}} page titles and meta descriptions
  */
-require_once( "$IP/includes/ParserFunctions/ParserFunctions.php" );
+$wgGamerWikiBundledExtensions = array(
+	'ParserFunctions/ParserFunctions.php',
+	'Cite/Cite.php',
+	'Cite/SpecialCite.php',
+	'CharInsert/CharInsert.php',
+	'ImageMap/ImageMap.php',
+	'InputBox/InputBox.php',
+	'Poem/Poem.php',
+	'Interwiki/Interwiki.php',
+	'Nuke/Nuke.php',
+	'Renameuser/Renameuser.php',
+	'ReplaceText/ReplaceText.php',
+	'SyntaxHighlight_GeSHi/SyntaxHighlight_GeSHi.php',
+	'PdfHandler/PdfHandler.php',
+	'DPLforum/DPLforum.php',
+	'Variables/Variables.php',
+	'Loops/Loops.php',
+	'WikiSEO/WikiSEO.php',
+);
+foreach ( $wgGamerWikiBundledExtensions as $wgGamerWikiExtFile ) {
+	require_once( "$IP/extensions/$wgGamerWikiExtFile" );
+}
+unset( $wgGamerWikiExtFile );
+
+# Administrators may edit the interwiki table (Special:Interwiki)
+$wgGroupPermissions['sysop']['interwiki'] = true;
 
 /**
  * For really cool vim folding this needs to be at the end:
