@@ -60,6 +60,8 @@ if ( $wgExtensionAssetsPath === false ) $wgExtensionAssetsPath = "$wgScriptPath/
 
 if ( $wgLogo === false ) $wgLogo = "$wgStylePath/common/images/wiki.png";
 
+if ( $wgFavicon === false ) $wgFavicon = "$wgScriptPath/favicon.ico";
+
 if ( $wgUploadPath === false ) $wgUploadPath = "$wgScriptPath/images";
 if ( $wgUploadDirectory === false ) $wgUploadDirectory = "$IP/images";
 

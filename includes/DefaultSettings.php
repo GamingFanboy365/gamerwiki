@@ -209,8 +209,10 @@ $wgLogo = false;
 
 /**
  * The URL path of the shortcut icon.
+ * GamerWiki: defaults to "{$wgScriptPath}/favicon.ico" (set in Setup.php),
+ * so a wiki installed in a subdirectory finds its own icon.
  */
-$wgFavicon = '/favicon.ico';
+$wgFavicon = false;
 
 /**
  * The URL path of the icon for iPhone and iPod Touch web app bookmarks.
@@ -258,7 +260,7 @@ $wgActionPaths = array();
  */
 
 /** Uploads have to be specially set up to be secure */
-$wgEnableUploads = false;
+$wgEnableUploads = true; # GamerWiki: a local wiki should accept files out of the box
 
 /** Allows to move images and other media files */
 $wgAllowImageMoving = true;
@@ -469,7 +471,7 @@ $wgAllowAsyncCopyUploads = false;
  * will have a maximum of 500 kB.
  *
  */
-$wgMaxUploadSize = 1024*1024*100; # 100MB
+$wgMaxUploadSize = 1024*1024*1024*2; # GamerWiki: 2GB (was 100MB); PHP's upload_max_filesize/post_max_size also apply
 
 /**
  * Point the upload navigation link to an external URL
@@ -536,7 +538,7 @@ $wgRepositoryBaseUrl = "http://commons.wikimedia.org/wiki/File:";
  * such as odt or doc, and untrusted users are allowed to upload files, then
  * your wiki will be vulnerable to cross-site request forgery (CSRF).
  */
-$wgFileExtensions = array( 'png', 'gif', 'jpg', 'jpeg' );
+$wgFileExtensions = array( 'png', 'gif', 'jpg', 'jpeg', 'pdf', 'ogv', 'oga', 'svg' ); # GamerWiki: added pdf, ogv, oga, svg
 
 /** Files with these extensions will never be allowed as uploads. */
 $wgFileBlacklist = array(
@@ -596,7 +598,7 @@ $wgStrictFileExtensions = true;
 $wgDisableUploadScriptChecks = false;
 
 /** Warn if uploaded files are larger than this (in bytes), or false to disable*/
-$wgUploadSizeWarning = false;
+$wgUploadSizeWarning = 1024*1024*1024*2; # GamerWiki: only warn at 2GB
 
 /**
  * list of trusted media-types and mime types.
@@ -731,7 +733,7 @@ $wgAllowTitlesInSVG = false;
  * The default is 50 MB if decompressed to RGBA form, which corresponds to
  * 12.5 million pixels or 3500x3500.
  */
-$wgMaxImageArea = 1.25e7;
+$wgMaxImageArea = 4.9e7; # GamerWiki: 49 megapixels (was 12.5)
 /**
  * Force thumbnailing of animated GIFs above this size to a single
  * frame instead of an animated thumbnail.  As of MW 1.17 this limit
@@ -2054,7 +2056,7 @@ $wgUseDynamicDates  = false;
  * Enable dates like 'May 12' instead of '12 May', this only takes effect if
  * the interface is set to English.
  */
-$wgAmericanDates    = false;
+$wgAmericanDates    = true; # GamerWiki
 /**
  * For Hindi and Arabic use local numerals instead of Western style (0-9)
  * numerals in interface.
@@ -2685,7 +2687,7 @@ $wgResourceLoaderExperimentalAsyncLoading = false;
  *
  * @since 1.25
  */
-$wgAllowSiteCSSOnRestrictedPages = false;
+$wgAllowSiteCSSOnRestrictedPages = true; # GamerWiki: keep the site look on login/preferences pages
 
 /**
  * When OutputHandler is used, mangle any output that contains
@@ -2738,7 +2740,27 @@ $wgMetaNamespaceTalk = false;
 #     102 => "Aide",
 #     103 => "Discussion_Aide"
 # );
-$wgExtraNamespaces = array();
+# GamerWiki: namespaces common on game wikis are built in. Gadget, TimedText
+# and Module are reserved so XML imports from newer wikis keep their pages
+# out of the main namespace, even without the matching extensions.
+$wgExtraNamespaces = array(
+	110 => 'Forum',
+	111 => 'Forum_talk',
+	710 => 'TimedText',
+	711 => 'TimedText_talk',
+	828 => 'Module',
+	829 => 'Module_talk',
+	2300 => 'Gadget',
+	2301 => 'Gadget_talk',
+	2302 => 'Gadget_definition',
+	2303 => 'Gadget_definition_talk',
+	3000 => 'Gallery',
+	3001 => 'Gallery_talk',
+	3002 => 'Bootleg',
+	3003 => 'Bootleg_talk',
+	3004 => 'Fanon',
+	3005 => 'Fanon_talk',
+);
 
 /**
  * Same as above, but for namespaces with gender distinction.
@@ -2869,7 +2891,15 @@ $wgNamespacesWithSubpages = array(
 	NS_MEDIAWIKI_TALK => true,
 	NS_TEMPLATE_TALK  => true,
 	NS_HELP_TALK      => true,
-	NS_CATEGORY_TALK  => true
+	NS_CATEGORY_TALK  => true,
+	# GamerWiki extra namespaces
+	110  => true, # Forum
+	111  => true,
+	3001 => true,
+	3002 => true, # Bootleg
+	3003 => true,
+	3004 => true, # Fanon
+	3005 => true,
 );
 
 /**
@@ -2977,7 +3007,7 @@ $wgUrlProtocols = array(
 $wgCleanSignatures = true;
 
 /**  Whether to allow inline image pointing to other websites */
-$wgAllowExternalImages = false;
+$wgAllowExternalImages = true; # GamerWiki
 
 /**
  * If the above is false, you can specify an exception here. Image URLs
@@ -3093,7 +3123,7 @@ $wgAllowDisplayTitle = true;
  * For consistency, restrict DISPLAYTITLE to titles that normalize to the same
  * canonical DB key.
  */
-$wgRestrictDisplayTitle = true;
+$wgRestrictDisplayTitle = false; # GamerWiki: allow any {{DISPLAYTITLE:}}
 
 /**
  * Maximum number of calls per parse to expensive parser functions such as
@@ -3270,14 +3300,14 @@ $wgDefaultUserOptions = array(
 	'rememberpassword'        => 0,
 	'rows'                    => 25,
 	'searchlimit'             => 20,
-	'showhiddencats'          => 0,
+	'showhiddencats'          => 1, # GamerWiki
 	'showjumplinks'           => 1,
 	'shownumberswatching'     => 1,
 	'showtoc'                 => 1,
 	'showtoolbar'             => 1,
 	'skin'                    => false,
 	'stubthreshold'           => 0,
-	'thumbsize'               => 2,
+	'thumbsize'               => 3, # GamerWiki: 200px
 	'underline'               => 2,
 	'uselivepreview'          => 0,
 	'usenewrc'                => 0,

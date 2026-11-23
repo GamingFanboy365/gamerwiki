@@ -178,7 +178,7 @@ abstract class Installer {
 		'_RightsProfile' => 'wiki',
 		'_LicenseCode' => 'none',
 		'_CCDone' => false,
-		'_Extensions' => array(),
+		'_Extensions' => array( 'ParserFunctions' ), # GamerWiki: on by default
 		'_MemCachedServers' => '',
 		'_UpgradeKeySupplied' => false,
 		'_ExistingDBSettings' => false,
