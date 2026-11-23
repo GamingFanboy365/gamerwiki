@@ -1,46 +1,35 @@
 <?php
 /**
- * Maintenance script to generate first letter data files for Collation.php.
- *
- * @license GPL-2.0-or-later
+ * @ingroup Maintenance
  * @file
- * @ingroup MaintenanceLanguage
  */
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/../Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-use MediaWiki\Collation\IcuCollation;
-use MediaWiki\Maintenance\Maintenance;
-use Wikimedia\StaticArrayWriter;
-use Wikimedia\StringUtils\StringUtils;
+require_once( dirname( __FILE__ ) .'/../Maintenance.php' );
 
 /**
  * Generate first letter data files for Collation.php
- *
- * @ingroup MaintenanceLanguage
  */
 class GenerateCollationData extends Maintenance {
-	/** @var string The directory with source data files in it */
-	public $dataDir;
+	/** The directory with source data files in it */
+	var $dataDir;
 
-	/** @var array<int,string> The primary weights, indexed by codepoint */
-	public $weights;
+	/** The primary weights, indexed by codepoint */
+	var $weights;
 
 	/**
 	 * A hashtable keyed by codepoint, where presence indicates that a character
 	 * has a decomposition mapping. This makes it non-preferred for group header
 	 * selection.
-	 * @var array<int,bool>
 	 */
-	public $mappedChars;
+	var $mappedChars;
 
-	/** @var resource|bool */
-	public $debugOutFile;
+	var $debugOutFile;
 
-	/** @var int[][] */
-	private $groups;
+	/**
+	 * Important tertiary weights from UTS #10 section 7.2
+	 */
+	const NORMAL_UPPERCASE = 0x08;
+	const NORMAL_HIRAGANA = 0X0E;
 
 	public function __construct() {
 		parent::__construct();
@@ -53,71 +42,45 @@ class GenerateCollationData extends Maintenance {
 
 	public function execute() {
 		$this->dataDir = $this->getOption( 'data-dir', '.' );
-
-		$allkeysPresent = file_exists( "{$this->dataDir}/allkeys.txt" );
-		$ucdallPresent = file_exists( "{$this->dataDir}/ucd.all.grouped.xml" );
-
-		if ( !$allkeysPresent || !$ucdallPresent ) {
-			$icuVersion = INTL_ICU_VERSION;
-			$unicodeVersion = implode( '.', array_slice( IntlChar::getUnicodeVersion(), 0, 3 ) );
-
-			$error = "";
-
-			if ( !$allkeysPresent ) {
-				$error .= "Unable to find allkeys.txt. "
-					. "Download it and specify its location with --data-dir=<DIR>. "
-					. "\n\n";
-			}
-			if ( !$ucdallPresent ) {
-				$error .= "Unable to find ucd.all.grouped.xml. "
-					. "Download it, unzip, and specify its location with --data-dir=<DIR>. "
-					. "\n\n";
-			}
-
-			$error .= "You are using ICU $icuVersion, intended for Unicode $unicodeVersion. "
-				. "Appropriate file(s) should be available at:\n";
-
-			$allkeysURL = "https://www.unicode.org/Public/UCA/$unicodeVersion/allkeys.txt";
-			$ucdallURL = "https://www.unicode.org/Public/$unicodeVersion/ucdxml/ucd.all.grouped.zip";
-
-			if ( !$allkeysPresent ) {
-				$error .= "* $allkeysURL\n";
-			}
-			if ( !$ucdallPresent ) {
-				$error .= "* $ucdallURL\n";
-			}
-
-			$this->fatalError( $error );
+		if ( !file_exists( "{$this->dataDir}/allkeys.txt" ) ) {
+			$this->error( "Unable to find allkeys.txt. Please download it from " .
+				"http://www.unicode.org/Public/UCA/latest/allkeys.txt and specify " .
+				"its location with --data-dir=<DIR>" );
+			exit( 1 );
 		}
-
+		if ( !file_exists( "{$this->dataDir}/ucd.all.grouped.xml" ) ) {
+			$this->error( "Unable to find ucd.all.grouped.xml. Please download it " .
+				"from http://www.unicode.org/Public/6.0.0/ucdxml/ucd.all.grouped.zip " .
+				"and specify its location with --data-dir=<DIR>" );
+			exit( 1 );
+		}
 		$debugOutFileName = $this->getOption( 'debug-output' );
 		if ( $debugOutFileName ) {
 			$this->debugOutFile = fopen( $debugOutFileName, 'w' );
 			if ( !$this->debugOutFile ) {
-				$this->fatalError( "Unable to open debug output file for writing" );
+				$this->error( "Unable to open debug output file for writing" );
+				exit( 1 );
 			}
 		}
 		$this->loadUcd();
 		$this->generateFirstChars();
 	}
 
-	private function loadUcd() {
+	function loadUcd() {
 		$uxr = new UcdXmlReader( "{$this->dataDir}/ucd.all.grouped.xml" );
-		$uxr->readChars( $this->charCallback( ... ) );
+		$uxr->readChars( array( $this, 'charCallback' ) );
 	}
 
-	private function charCallback( array $data ) {
+	function charCallback( $data ) {
 		// Skip non-printable characters,
 		// but do not skip a normal space (U+0020) since
 		// people like to use that as a fake no header symbol.
 		$category = substr( $data['gc'], 0, 1 );
-		// @phan-suppress-next-line PhanParamSuspiciousOrder False positive
-		if ( !str_contains( 'LNPS', $category )
-			&& $data['cp'] !== '0020'
-		) {
+		if ( strpos( 'LNPS', $category ) === false
+			&& $data['cp'] !== '0020' ) {
 			return;
 		}
-		$cp = (int)hexdec( $data['cp'] );
+		$cp = hexdec( $data['cp'] );
 
 		// Skip the CJK ideograph blocks, as an optimisation measure.
 		// UCA doesn't sort them properly anyway, without tailoring.
@@ -131,16 +94,19 @@ class GenerateCollationData extends Maintenance {
 			return;
 		}
 
-		// Skip characters that mapped to a single character we skipped above.
-		// e.g. U+2329 -> U+3008 (from CJK Symbols and Punctuation)
-		if ( $data['dm'] !== '#' && !str_contains( $data['dm'], ' ' ) &&
-			!isset( $this->weights[ hexdec( $data['dm'] ) ] )
-		) {
-			return;
-		}
-
 		// Calculate implicit weight per UTS #10 v6.0.0, sec 7.1.3
-		$a = 0xFBC0 + ( $cp >> 15 );
+		if ( $data['UIdeo'] === 'Y' ) {
+			if ( $data['block'] == 'CJK Unified Ideographs'
+				|| $data['block'] == 'CJK Compatibility Ideographs' )
+			{
+				$base = 0xFB40;
+			} else {
+				$base = 0xFB80;
+			}
+		} else {
+			$base = 0xFBC0;
+		}
+		$a = $base + ( $cp >> 15 );
 		$b = ( $cp & 0x7fff ) | 0x8000;
 
 		$this->weights[$cp] = sprintf( ".%04X.%04X", $a, $b );
@@ -154,33 +120,43 @@ class GenerateCollationData extends Maintenance {
 		}
 	}
 
-	private function generateFirstChars() {
+	function generateFirstChars() {
 		$file = fopen( "{$this->dataDir}/allkeys.txt", 'r' );
 		if ( !$file ) {
-			$this->fatalError( "Unable to open allkeys.txt" );
+			$this->error( "Unable to open allkeys.txt" );
+			exit( 1 );
+		}
+		global $IP;
+		$outFile = fopen( "$IP/serialized/first-letters-root.ser", 'w' );
+		if ( !$outFile ) {
+			$this->error( "Unable to open output file first-letters-root.ser" );
+			exit( 1 );
 		}
 
-		$goodTertiaryChars = [];
-		$primaryWeights = [];
+		$goodTertiaryChars = array();
 
 		// For each character with an entry in allkeys.txt, overwrite the implicit
 		// entry in $this->weights that came from the UCD.
 		// Also gather a list of tertiary weights, for use in selecting the group header
-		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
-		while ( ( $line = fgets( $file ) ) !== false ) {
+		while ( false !== ( $line = fgets( $file ) ) ) {
 			// We're only interested in single-character weights, pick them out with a regex
 			$line = trim( $line );
 			if ( !preg_match( '/^([0-9A-F]+)\s*;\s*([^#]*)/', $line, $m ) ) {
 				continue;
 			}
 
-			$cp = (int)hexdec( $m[1] );
+			$cp = hexdec( $m[1] );
 			$allWeights = trim( $m[2] );
 			$primary = '';
 			$tertiary = '';
 
+			if ( !isset( $this->weights[$cp] ) ) {
+				// Non-printable, ignore
+				continue;
+			}
 			foreach ( StringUtils::explode( '[', $allWeights ) as $weightStr ) {
-				if ( preg_match_all( '/[*.]([0-9A-F]+)/', $weightStr, $m ) ) {
+				preg_match_all( '/[*.]([0-9A-F]+)/', $weightStr, $m );
+				if ( !empty( $m[1] ) ) {
 					if ( $m[1][0] !== '0000' ) {
 						$primary .= '.' . $m[1][0];
 					}
@@ -189,32 +165,29 @@ class GenerateCollationData extends Maintenance {
 					}
 				}
 			}
-			// Track all primary weights for the expansion detection
-			$primaryWeights[$primary] = true;
-
-			// Skip characters excluded from header selection by charCallback()
-			if ( !isset( $this->weights[$cp] ) ) {
-				continue;
-			}
 			$this->weights[$cp] = $primary;
 			if ( $tertiary === '.0008'
-				|| $tertiary === '.000E'
-			) {
+				|| $tertiary === '.000E' )
+			{
 				$goodTertiaryChars[$cp] = true;
 			}
 		}
 		fclose( $file );
 
 		// Identify groups of characters with the same primary weight
-		$this->groups = [];
+		$this->groups = array();
 		asort( $this->weights, SORT_STRING );
 		$prevWeight = reset( $this->weights );
-		$group = [];
+		$group = array();
 		foreach ( $this->weights as $cp => $weight ) {
 			if ( $weight !== $prevWeight ) {
 				$this->groups[$prevWeight] = $group;
 				$prevWeight = $weight;
-				$group = $this->groups[$weight] ?? [];
+				if ( isset( $this->groups[$weight] ) ) {
+					$group = $this->groups[$weight];
+				} else {
+					$group = array();
+				}
 			}
 			$group[] = $cp;
 		}
@@ -226,11 +199,11 @@ class GenerateCollationData extends Maintenance {
 		// character has a longer primary weight sequence with an initial
 		// portion equal to the first character, then remove the second
 		// character. This avoids having characters like U+A732 (double A)
-		// polluting the basic Latin sort area.
+		// polluting the basic latin sort area.
 
 		foreach ( $this->groups as $weight => $group ) {
 			if ( preg_match( '/(\.[0-9A-F]*)\./', $weight, $m ) ) {
-				if ( isset( $primaryWeights[$m[1]] ) ) {
+				if ( isset( $this->groups[$m[1]] ) ) {
 					unset( $this->groups[$weight] );
 				}
 			}
@@ -239,15 +212,15 @@ class GenerateCollationData extends Maintenance {
 		ksort( $this->groups, SORT_STRING );
 
 		// Identify the header character in each group
-		$headerChars = [];
+		$headerChars = array();
 		$prevChar = "\000";
 		$tertiaryCollator = new Collator( 'root' );
 		$primaryCollator = new Collator( 'root' );
 		$primaryCollator->setStrength( Collator::PRIMARY );
 		$numOutOfOrder = 0;
 		foreach ( $this->groups as $weight => $group ) {
-			$uncomposedChars = [];
-			$goodChars = [];
+			$uncomposedChars = array();
+			$goodChars = array();
 			foreach ( $group as $cp ) {
 				if ( isset( $goodTertiaryChars[$cp] ) ) {
 					$goodChars[] = $cp;
@@ -268,53 +241,43 @@ class GenerateCollationData extends Maintenance {
 			$tertiaryCollator->sort( $x );
 			$cp = $x[0];
 
-			$char = UtfNormal\Utils::codepointToUtf8( $cp );
+			$char = codepointToUtf8( $cp );
 			$headerChars[] = $char;
 			if ( $primaryCollator->compare( $char, $prevChar ) <= 0 ) {
-				$numOutOfOrder++;
+				$numOutOfOrder ++;
+				/*
+				printf( "Out of order: U+%05X > U+%05X\n",
+					utf8ToCodepoint( $prevChar ),
+					utf8ToCodepoint( $char ) );
+				 */
 			}
 			$prevChar = $char;
 
 			if ( $this->debugOutFile ) {
 				fwrite( $this->debugOutFile, sprintf( "%05X %s %s (%s)\n", $cp, $weight, $char,
-					implode( ' ', array_map( UtfNormal\Utils::codepointToUtf8( ... ), $group ) ) ) );
+					implode( ' ', array_map( 'codepointToUtf8', $group ) ) ) );
 			}
 		}
 
 		print "Out of order: $numOutOfOrder / " . count( $headerChars ) . "\n";
 
-		$writer = new StaticArrayWriter();
-		file_put_contents(
-			MW_INSTALL_PATH . '/languages/data/first-letters-root.php',
-			$writer->create(
-				$headerChars,
-				"File created by maintenance/language/generateCollationData.php\n"
-					. "@codeCoverageIgnore"
-			)
-		);
-		echo "first-letters-root: file written.\n";
+		fwrite( $outFile, serialize( $headerChars ) );
 	}
 }
 
 class UcdXmlReader {
-	/** @var string */
-	public $fileName;
-	/** @var callable */
-	public $callback;
-	/** @var array */
-	public $groupAttrs;
-	/** @var XMLReader */
-	public $xml;
-	/** @var array[] */
-	public $blocks = [];
-	/** @var array */
-	public $currentBlock;
+	var $fileName;
+	var $callback;
+	var $groupAttrs;
+	var $xml;
+	var $blocks = array();
+	var $currentBlock;
 
-	public function __construct( string $fileName ) {
+	function __construct( $fileName ) {
 		$this->fileName = $fileName;
 	}
 
-	public function readChars( callable $callback ) {
+	public function readChars( $callback ) {
 		$this->getBlocks();
 		$this->currentBlock = reset( $this->blocks );
 		$xml = $this->open();
@@ -331,21 +294,21 @@ class UcdXmlReader {
 				}
 			} elseif ( $xml->nodeType === XMLReader::END_ELEMENT ) {
 				if ( $xml->name === 'group' ) {
-					$this->groupAttrs = [];
+					$this->groupAttrs = array();
 				}
 			}
 		}
 		$xml->close();
 	}
 
-	protected function open(): XMLReader {
+	protected function open() {
 		$this->xml = new XMLReader;
-		if ( !$this->xml->open( $this->fileName ) ) {
-			throw new RuntimeException( __METHOD__ . ": unable to open {$this->fileName}" );
+		$this->xml->open( $this->fileName );
+		if ( !$this->xml ) {
+			throw new MWException( __METHOD__.": unable to open {$this->fileName}" );
 		}
 		while ( $this->xml->name !== 'ucd' && $this->xml->read() );
 		$this->xml->read();
-
 		return $this->xml;
 	}
 
@@ -355,11 +318,10 @@ class UcdXmlReader {
 	 * @return array
 	 */
 	protected function readAttributes() {
-		$attrs = [];
+		$attrs = array();
 		while ( $this->xml->moveToNextAttribute() ) {
 			$attrs[$this->xml->name] = $this->xml->value;
 		}
-
 		return $attrs;
 	}
 
@@ -376,7 +338,7 @@ class UcdXmlReader {
 
 		for ( $cp = $first; $cp <= $last; $cp++ ) {
 			$hexCp = sprintf( "%04X", $cp );
-			foreach ( [ 'na', 'na1' ] as $nameProp ) {
+			foreach ( array( 'na', 'na1' ) as $nameProp ) {
 				if ( isset( $attrs[$nameProp] ) ) {
 					$attrs[$nameProp] = str_replace( '#', $hexCp, $attrs[$nameProp] );
 				}
@@ -394,11 +356,11 @@ class UcdXmlReader {
 			}
 
 			$attrs['cp'] = $hexCp;
-			( $this->callback )( $attrs );
+			call_user_func( $this->callback, $attrs );
 		}
 	}
 
-	public function getBlocks(): array {
+	public function getBlocks() {
 		if ( $this->blocks ) {
 			return $this->blocks;
 		}
@@ -412,17 +374,16 @@ class UcdXmlReader {
 					$attrs = $this->readAttributes();
 					$first = hexdec( $attrs['first-cp'] );
 					$last = hexdec( $attrs['last-cp'] );
-					$this->blocks[$attrs['name']] = [ $first, $last ];
+					$this->blocks[$attrs['name']] = array( $first, $last );
 				}
 			}
 		}
 		$xml->close();
-
 		return $this->blocks;
 	}
+
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = GenerateCollationData::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = 'GenerateCollationData';
+require_once( RUN_MAINTENANCE_IF_MAIN );
+

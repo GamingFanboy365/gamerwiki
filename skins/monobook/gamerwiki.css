@@ -1,0 +1,583 @@
+/**
+ * GamerWiki house style for MonoBook.
+ *
+ * Loaded after main.css as part of the skins.monobook module, so every
+ * GamerWiki looks like this out of the box. Per-wiki tweaks still belong
+ * in MediaWiki:Common.css and MediaWiki:Monobook.css, which load later
+ * and override anything here.
+ */
+
+/* == Interface ========================================================= */
+
+#globalWrapper {
+	background: none !important;
+}
+.firstHeading {
+	margin-top: 5px;
+}
+p {
+	margin: 0.6em 0 0.7em 0;
+}
+h1 {
+	font-size: 193%;
+}
+h3 + dl, h4 + dl, h5 + dl {
+	margin-top: -0.1em;
+}
+
+.pBody,
+.portlet h3,
+#footer #f-list {
+	font-family: verdana, sans-serif;
+}
+.pBody {
+	z-index: 3 !important;
+}
+.portlet {
+	width: 11.8em;
+}
+#p-cactions {
+	left: 11.7em;
+}
+#p-cactions li a {
+	color: #00c;
+}
+#p-cactions .new a {
+	color: #c00;
+}
+
+/* Personal tools: boxed in the top right corner */
+#p-personal li a {
+	color: #00f;
+}
+#p-personal li a:hover {
+	background-color: transparent;
+	text-decoration: underline;
+}
+#p-personal a.new {
+	color: #f00;
+}
+#p-personal a.new:visited {
+	color: #c00;
+}
+@media all and (min-width: 551px) {
+	li#pt-login,
+	li#pt-userpage,
+	li#pt-anonuserpage {
+		color: #606060;
+		/* @embed */
+		background: url(user_icon.png) top left no-repeat;
+		padding: 1px 0 2px 20px;
+		line-height: 20px;
+	}
+	#p-personal ul {
+		background: #fff;
+		border-left: 1px solid #aaa;
+		border-bottom: 1px solid #aaa;
+		width: auto;
+		display: inline;
+		position: absolute;
+		right: 0;
+		padding-left: 0;
+		padding-bottom: 0;
+		margin-top: -1px;
+	}
+}
+
+/* Site notice */
+#siteNotice {
+	border-top: 2px solid #ccc;
+	border-bottom: 2px solid #ccc;
+	padding: 3px 2px 2px 2px;
+	margin: -2px 0 11px;
+}
+#localNotice {
+	margin-bottom: 0;
+}
+#localNotice hr {
+	background: #ccc;
+}
+#localNotice a.external {
+	padding: 0 !important;
+	background: none !important;
+}
+
+/* Search box and form controls */
+input.searchButton {
+	color: #000;
+	cursor: pointer;
+	background-color: #fff;
+	border: 1px solid #2f6fab;
+	padding: 0 0.4em !important;
+}
+#searchButton,
+#mw-searchButton,
+#searchGoButton {
+	font-weight: normal;
+}
+#searchInput {
+	border: 1px solid #2f6fab;
+	padding-right: 0;
+}
+input[type="radio"],
+input[type="checkbox"] {
+	border: none;
+}
+select {
+	color: #000;
+	border: 1px solid #2f6fab;
+}
+
+/* Footer */
+#f-list {
+	line-height: 17px;
+}
+
+/* Hide upload-only and maintenance-only notices */
+.mw-special-Upload .noupload,
+.useronly,
+.autoconfonly,
+.editprotected,
+.editinterface {
+	display: none;
+}
+
+/* Message boxes */
+.messagebox, .errorbox, .warningbox, .successbox {
+	padding: 12px;
+}
+
+/* Revision info */
+div#viewingold-warning {
+	background: #f9f9f9;
+	border: 1px solid #aaa;
+	color: #000 !important;
+	font-weight: bold;
+	margin: .5em 0 .5em;
+	padding: .5em 1em;
+	clear: both;
+}
+#mw-revision-info, #mw-revision-info-current, #mw-revision-nav {
+	color: #54595d;
+}
+
+/* Edit page */
+.wikiEditor-ui textarea#wpTextbox1 {
+	height: 474px;
+	line-height: 1.4em;
+}
+.mw-summary-preview {
+	margin-bottom: 0.5em;
+}
+.client-js .editButtons .editHelp {
+	display: none;
+}
+#editpage-copywarn {
+	margin: 0.6em 0 0.7em 0;
+}
+div.mw-editinginterface {
+	margin: 0.4em 0 0.5em 0;
+}
+
+/* Diffs */
+.diffchange {
+	font-weight: normal;
+}
+.diff-addedline, .diff-deletedline, .diff-context {
+	font-size: 92%;
+}
+
+/* Search results */
+.searchresults {
+	margin: 1em 0 1em 0.4em;
+}
+.searchresults .mw-search-exists {
+	margin-bottom: 3px;
+}
+.mw-search-result-data {
+	color: #008000;
+	font-size: 97%;
+}
+.mw-search-nonefound {
+	margin: 0;
+}
+
+/* "From year" boxes on history and contributions */
+input#year {
+	width: 5em;
+}
+
+/* Special pages */
+.allpagesredirect a.mw-redirect,
+.watchlistredir a.mw-redirect {
+	color: #888 !important;
+}
+.special li {
+	line-height: 19px;
+}
+#preftoc a:active {
+	color: #00c;
+}
+.usermessage {
+	margin-top: 1em;
+}
+
+/* Main Page: no title, subtitle, categories or "last modified" */
+body.page-Main_Page.action-view h1.firstHeading,
+body.page-Main_Page.action-view #contentSub > *,
+body.page-Main_Page.action-view #siteSub,
+body.page-Main_Page.action-view #catlinks,
+body.page-Main_Page.action-view #lastmod {
+	display: none !important;
+}
+
+/* == Links ============================================================= */
+
+a { color: #00f; }
+a:active { color: orange; }
+a:visited { color: #00c; }
+a#movepage-oldlink { color: #c20; }
+a#movepage-oldlink:visited { color: #a55858; }
+#bodyContent a.extiw { color: #06f; }
+#bodyContent a.extiw:visited { color: #3366bb; }
+#bodyContent a.external { color: #06f; }
+#bodyContent a.external:visited { color: #0044cc; }
+
+a font:hover, a span:hover {
+	text-decoration: inherit;
+}
+.autocomment a:hover {
+	color: inherit;
+}
+span.fakelink {
+	color: #002bb8;
+	cursor: pointer;
+}
+span.fakelink:hover {
+	text-decoration: underline;
+}
+
+/* == Page content ====================================================== */
+
+#bodyContent {
+	position: relative;
+}
+#toc, .toc {
+	clear: left;
+	margin-bottom: 3px;
+}
+pre {
+	overflow: auto;
+}
+hr {
+	overflow: hidden;
+}
+blockquote {
+	border-left: 3px solid #06f;
+	margin-left: 2em;
+	padding-left: 1em;
+}
+div[style*="column-"] > p {
+	margin: 0 !important;
+}
+#mw-content-text table sup {
+	white-space: nowrap;
+}
+span.comment,
+#mw-content-text a.external.free,
+.filehistory.wikitable td[dir] {
+	word-wrap: anywhere;
+}
+table {
+	max-width: 100%;
+}
+@media all and (max-width: 1100px) {
+	#mw-content-text table {
+		min-width: 0 !important;
+	}
+}
+.explain[title] {
+	text-decoration: none;
+	border-bottom: 1px dotted;
+}
+.easywrap {
+	width: 100%;
+	table-layout: fixed;
+	word-wrap: break-word;
+	overflow: hidden;
+}
+.right {
+	text-align: right;
+}
+.mobileonly {
+	display: none;
+}
+
+/* Tighter list spacing in content namespaces (not Forum) */
+.ns-subject:not(.ns-110) #mw-content-text li > ul,
+.ns-subject:not(.ns-110) #mw-content-text li > ol {
+	margin-top: 0.1em !important;
+}
+.ns-subject:not(.ns-110) #mw-content-text dl + ul,
+.ns-subject:not(.ns-110) #mw-content-text dl + ol {
+	margin-top: -0.3em !important;
+}
+.ns-subject:not(.ns-110) #mw-content-text ul + dl,
+.ns-subject:not(.ns-110) #mw-content-text ol + dl {
+	margin-top: 0.3em !important;
+}
+
+/* Categories */
+#catlinks li {
+	margin: 0.28em 0;
+	line-height: 1em;
+}
+
+/* References */
+ol.references {
+	margin-top: 0;
+	font-size: 90%;
+}
+ol.references div {
+	display: inline;
+}
+ol.references span {
+	line-height: 1;
+}
+
+/* User pages: keep images inside the page; no fixed-position tricks on talk pages */
+.ns-2 #mw-content-text p > img {
+	max-width: 100% !important;
+	height: auto !important;
+}
+.ns-3 [style*="position:fixed"],
+.ns-3 [style*="position: fixed"] {
+	display: none;
+}
+
+/* == Images and galleries ============================================== */
+
+/* Sprites and screenshots stay crisp when scaled */
+img,
+.pixelated, .pixelart, .sprites, .sprite {
+	image-rendering: crisp-edges;
+	image-rendering: pixelated;
+}
+
+html .thumbimage {
+	background-color: #fff;
+}
+div.tleft, div.tright {
+	margin-top: 0.2em;
+	margin-bottom: 0.8em;
+}
+.mw_metadata {
+	margin-top: 5px;
+}
+#file img, .filehistory a img {
+	/* @embed */
+	background: url(../common/images/Checker-16x16.png) repeat;
+}
+
+ul.gallery, li.gallerybox div.thumb {
+	margin-bottom: 0;
+	padding-bottom: 0;
+}
+#bodyContent ul.gallery {
+	margin: 2px;
+	padding: 2px;
+}
+li.gallerycaption {
+	text-align: unset;
+}
+.gallery.center {
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+.gallery.centertext .gallerytext {
+	text-align: center !important;
+}
+.gallery.blackbg .thumb {
+	background: #000 !important;
+}
+.gallery.graybg .thumb, .gallery.greybg .thumb {
+	background: #808080 !important;
+}
+
+/* == Tables ============================================================ */
+
+/* Scrollable tables */
+table.scrollable {
+	display: block;
+	overflow: auto;
+	max-width: max-content;
+	border: 0;
+}
+
+/* Black border and cell tables */
+table.table {
+	background: #fff;
+	margin: 1em 0;
+	border: 1pt solid #000;
+	border-collapse: collapse;
+	color: black;
+}
+table.table > * > tr > td,
+table.table > * > tr > th {
+	border: 1pt solid #000;
+	padding: 0.2em 0.4em;
+}
+
+/* Responsive tables: stack cells on phones, labelled by data-label */
+@media all and (max-width: 719px) {
+	table.responsive > tbody > tr {
+		display: block;
+	}
+	table.responsive > tbody > tr > td {
+		display: block;
+		text-align: right;
+	}
+	table.responsive > tbody > tr > td::before {
+		float: left;
+		font-weight: bold;
+		content: attr(data-label);
+		margin-right: 0.75em;
+	}
+	table.responsive > tbody > tr:not(:last-child) {
+		margin-bottom: 0.5em;
+	}
+	table.responsive.jquery-tablesorter > thead,
+	table.responsive:not(.jquery-tablesorter) > tbody > tr:first-child {
+		display: none;
+	}
+}
+
+/* Collapsible toggles */
+.mw-collapsible-toggle {
+	padding-right: 0.3em;
+}
+.navbox .mw-collapsible-toggle {
+	text-align: right;
+	min-width: 3.729em;
+}
+.wikitable.mw-collapsed .mw-collapsible-toggle {
+	margin-left: 10px;
+}
+.contentbox > .mw-collapsible-toggle {
+	float: none !important;
+}
+
+/* == Templates ========================================================= */
+
+/* Main Page boxes */
+#mainpagebox {
+	padding: 3px;
+	vertical-align: top;
+	width: 100%;
+}
+#mainpageheader {
+	border: 0;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 132%;
+	text-align: center;
+	padding-left: 0.4em;
+	padding-top: 0.2em;
+	padding-bottom: 0.2em;
+}
+
+/* Infoboxes */
+.infobox {
+	background-color: #fff;
+	border: 1px solid gray;
+	float: right;
+	font-size: 88%;
+	width: 300px;
+	margin: 0 0 1em 1.15em;
+	padding: 4px;
+}
+.infobox tr {
+	vertical-align: top;
+}
+.infobox td, .infobox th {
+	padding: 2px;
+}
+.infobox .mw-collapsible-toggle {
+	min-width: 39px;
+	text-align: right;
+}
+.infobox.bordered {
+	border-collapse: collapse;
+}
+.infobox.bordered td,
+.infobox.bordered th {
+	border: 1px solid #000;
+}
+.infobox.bordered.gray td,
+.infobox.bordered.gray th {
+	border: 1px solid #aaa;
+}
+.infobox.game td:nth-of-type(1) {
+	background: #ccccff;
+}
+
+/* Notice templates */
+.notice-template {
+	display: flex;
+	background: #f1f1de;
+	border: 2px solid #996;
+	margin: 0 2% 0.75em;
+	padding: 0 1em;
+	color: #000;
+}
+.notice-template p {
+	margin: 0.6em 0;
+}
+body:not(.ns-6) .notice-template + .notice-template {
+	margin-top: -0.375em !important;
+}
+#mw-imagepage-content .notice-template + #aboutfile {
+	margin-top: 0.75em !important;
+}
+#mw-imagepage-content .notice-template:not(#aboutfile) {
+	margin-top: 0.75em !important;
+	margin-bottom: 2.5px !important;
+}
+.notice-template.copyright {
+	background: #fff9f9;
+	border: 1px solid #c55;
+	font-size: 95%;
+	width: 90%;
+	margin: 5px auto;
+	padding: 5px;
+}
+@media all and (min-width: 720px) {
+	.notice-template.image {
+		text-align: center;
+	}
+}
+
+/* Forum namespace */
+.forumheader {
+	border: 1px solid #88a;
+	background-color: #f8f8ff;
+	margin-top: 1em;
+	margin-bottom: 1em;
+	padding: 8px;
+}
+.forumlist td.forum_edited a {
+	color: #000;
+	text-decoration: none;
+}
+.forumlist td.forum_title a,
+.forumlist th.forum_title {
+	padding-left: 20px;
+}
+.forumlist td.forum_title a.forum_new {
+	font-weight: bold;
+	padding-left: 20px;
+}
+.forumlist td.forum_title a.forum_new:visited {
+	background: none;
+	font-weight: normal;
+	padding-left: 20px;
+}

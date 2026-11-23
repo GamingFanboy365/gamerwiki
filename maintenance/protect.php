@@ -1,29 +1,31 @@
 <?php
 /**
- * Protect or unprotect a page.
+ * Protect or unprotect an article.
  *
- * @license GPL-2.0-or-later
- * @file
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @ingroup Maintenance
  */
 
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Title\Title;
-use MediaWiki\User\User;
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that protects or unprotects a page.
- *
- * @ingroup Maintenance
- */
 class Protect extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Protect or unprotect a page from the command line.' );
+		$this->mDescription = "Protect or unprotect an article from the command line.";
 		$this->addOption( 'unprotect', 'Removes protection' );
 		$this->addOption( 'semiprotect', 'Adds semi-protection' );
 		$this->addOption( 'cascade', 'Add cascading protection' );
@@ -33,8 +35,10 @@ class Protect extends Maintenance {
 	}
 
 	public function execute() {
-		$userName = $this->getOption( 'user', false );
-		$reason = $this->getOption( 'reason', '' );
+		global $wgUser;
+
+		$userName = $this->getOption( 'u', 'Maintenance script' );
+		$reason = $this->getOption( 'r', '' );
 
 		$cascade = $this->hasOption( 'cascade' );
 
@@ -45,33 +49,28 @@ class Protect extends Maintenance {
 			$protection = "";
 		}
 
-		if ( $userName === false ) {
-			$user = User::newSystemUser( User::MAINTENANCE_SCRIPT_USER, [ 'steal' => true ] );
-		} else {
-			$user = User::newFromName( $userName );
-		}
+		$user = User::newFromName( $userName );
 		if ( !$user ) {
-			$this->fatalError( "Invalid username" );
+			$this->error( "Invalid username", true );
 		}
 
-		$t = Title::newFromText( $this->getArg( 0 ) );
+		$restrictions = array( 'edit' => $protection, 'move' => $protection );
+
+		$t = Title::newFromText( $this->getArg() );
 		if ( !$t ) {
-			$this->fatalError( "Invalid title" );
+			$this->error( "Invalid title", true );
 		}
 
-		$services = $this->getServiceContainer();
-		$restrictions = [];
-		foreach ( $services->getRestrictionStore()->listApplicableRestrictionTypes( $t ) as $type ) {
+		$restrictions = array();
+		foreach( $t->getRestrictionTypes() as $type ) {
 			$restrictions[$type] = $protection;
 		}
 
 		# un/protect the article
-		$this->output( "Updating protection status..." );
+		$this->output( "Updating protection status... " );
 
-		$this->beginTransactionRound( __METHOD__ );
-		$page = $services->getWikiPageFactory()->newFromTitle( $t );
-		$status = $page->doUpdateRestrictions( $restrictions, [], $cascade, $reason, $user );
-		$this->commitTransactionRound( __METHOD__ );
+		$page = WikiPage::factory( $t );
+		$status = $page->doUpdateRestrictions( $restrictions, array(), $cascade, $reason, $user );
 
 		if ( $status->isOK() ) {
 			$this->output( "done\n" );
@@ -81,7 +80,5 @@ class Protect extends Maintenance {
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = Protect::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "Protect";
+require_once( RUN_MAINTENANCE_IF_MAIN );

@@ -1,86 +1,98 @@
 <?php
 
-use MediaWiki\MainConfigNames;
-use MediaWiki\Title\Title;
-
-/**
- * @coversNothing Just a sample
- */
-class SampleTest extends MediaWikiLangTestCase {
+class TestSample extends MediaWikiLangTestCase {
 
 	/**
 	 * Anything that needs to happen before your tests should go here.
 	 */
-	protected function setUp(): void {
-		// Be sure to call the parent setup and teardown functions.
-		// This makes sure that all the various cleanup and restorations
-		// happen as they should (including the restoration for setMwGlobals).
+	function setUp() {
+		global $wgContLang;
 		parent::setUp();
 
-		// This sets the config settings, and will restore them automatically
-		// after each test.
-		$this->overrideConfigValues( [
-			MainConfigNames::LanguageCode => 'en',
-			MainConfigNames::CapitalLinks => true,
-		] );
+		/* For example, we need to set $wgContLang for creating a new Title */
+		$wgContLang = Language::factory( 'en' );
 	}
 
 	/**
 	 * Anything cleanup you need to do should go here.
 	 */
-	protected function tearDown(): void {
+	function tearDown() {
 		parent::tearDown();
 	}
 
 	/**
-	 * Name tests so that PHPUnit can turn them into sentences when
-	 * they run. You are encouraged to use the naming described at:
-	 * https://docs.phpunit.de/en/9.6/annotations.html and
-	 * https://docs.phpunit.de/en/9.6/textui.html?highlight=testdox#testdox
+	 * Name tests so that PHPUnit can turn them into sentances when
+	 * they run.  While MediaWiki isn't strictly an Agile Programming
+	 * project, you are encouraged to use the naming described under
+	 * "Agile Documentation" at
+	 * http://www.phpunit.de/manual/3.4/en/other-uses-for-tests.html
 	 */
-	public function testTitleObjectStringConversion() {
-		$title = Title::makeTitle( NS_MAIN, "Text" );
-		$this->assertInstanceOf( Title::class, $title, "Title creation" );
-		$this->assertEquals( "Text", $title, "Automatic string conversion" );
+	function testTitleObjectStringConversion() {
+		$title = Title::newFromText("text");
+		$this->assertEquals("Text", $title->__toString(), "Title creation");
+		$this->assertEquals("Text", "Text", "Automatic string conversion");
 
-		$title = Title::makeTitle( NS_MEDIA, "Text" );
-		$this->assertEquals( "Media:Text", $title, "Title creation with namespace" );
+		$title = Title::newFromText("text", NS_MEDIA);
+		$this->assertEquals("Media:Text", $title->__toString(), "Title creation with namespace");
+
 	}
 
 	/**
-	 * If you want to run the same test with a variety of data, use a data provider.
-	 * See https://docs.phpunit.de/en/9.6/writing-tests-for-phpunit.html
+	 * If you want to run a the same test with a variety of data. use a data provider.
+	 * see: http://www.phpunit.de/manual/3.4/en/writing-tests-for-phpunit.html
 	 */
-	public static function provideTitles() {
-		return [
-			[ 'Text', NS_MEDIA, 'Media:Text' ],
-			[ 'Text', null, 'Text' ],
-			[ 'text', null, 'Text' ],
-			[ 'Text', NS_USER, 'User:Text' ],
-			[ 'Photo.jpg', NS_FILE, 'File:Photo.jpg' ]
-		];
+	public function provideTitles() {
+		return array(
+			array( 'Text', NS_MEDIA, 'Media:Text' ),
+			array( 'Text', null, 'Text' ),
+			array( 'text', null, 'Text' ),
+			array( 'Text', NS_USER, 'User:Text' ),
+			array( 'Photo.jpg', NS_IMAGE, 'File:Photo.jpg' )
+		);
 	}
 
 	/**
 	 * @dataProvider provideTitles
-	 * See https://docs.phpunit.de/en/9.6/annotations.html#dataprovider
+	 * See http://www.phpunit.de/manual/3.4/en/appendixes.annotations.html#appendixes.annotations.dataProvider
 	 */
-	public function testCreateBasicListOfTitles( $titleName, $ns, $text ) {
-		$title = Title::newFromText( $titleName, $ns );
-		$this->assertEquals( $text, "$title", "see if '$titleName' matches '$text'" );
+	public function testCreateBasicListOfTitles($titleName, $ns, $text) {
+		$title = Title::newFromText($titleName, $ns);
+		$this->assertEquals($text, "$title", "see if '$titleName' matches '$text'");
+	}
+
+	public function testSetUpMainPageTitleForNextTest() {
+		$title = Title::newMainPage();
+		$this->assertEquals("Main Page", "$title", "Test initial creation of a title");
+
+		return $title;
 	}
 
 	/**
 	 * Instead of putting a bunch of tests in a single test method,
 	 * you should put only one or two tests in each test method.  This
 	 * way, the test method names can remain descriptive.
+	 *
+	 * If you want to make tests depend on data created in another
+	 * method, you can create dependencies feed whatever you return
+	 * from the dependant method (e.g. testInitialCreation in this
+	 * example) as arguments to the next method (e.g. $title in
+	 * testTitleDepends is whatever testInitialCreatiion returned.)
 	 */
+	/**
+	 * @depends testSetUpMainPageTitleForNextTest
+	 * See http://www.phpunit.de/manual/3.4/en/appendixes.annotations.html#appendixes.annotations.depends
+	 */
+	public function testCheckMainPageTitleIsConsideredLocal( $title ) {
+		$this->assertTrue( $title->isLocal() );
+	}
 
 	/**
-	 * See https://docs.phpunit.de/en/9.6/writing-tests-for-phpunit.html?highlight=exceptions#testing-exceptions
+	 * @expectedException MWException object
+	 * See http://www.phpunit.de/manual/3.4/en/appendixes.annotations.html#appendixes.annotations.expectedException
 	 */
-	public function testTitleObjectFromObject() {
-		$this->expectException( InvalidArgumentException::class );
-		Title::newFromText( Title::makeTitle( NS_MAIN, 'Test' ) );
+	function testTitleObjectFromObject() {
+		$title = Title::newFromText( Title::newFromText( "test" ) );
+		$this->assertEquals( "Test", $title->isLocal() );
 	}
 }
+

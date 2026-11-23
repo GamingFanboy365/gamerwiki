@@ -1,76 +1,49 @@
 <?php
 /**
- * Send purge requests for listed pages to CDN
+ * Send purge requests for listed pages to squid
  *
- * @license GPL-2.0-or-later
- * @file
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @ingroup Maintenance
  */
 
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Title\Title;
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that sends purge requests for listed pages to CDN.
- *
- * @ingroup Maintenance
- */
 class PurgeList extends Maintenance {
-	/** @var string|null */
-	private $namespaceId;
-	/** @var bool */
-	private $allNamespaces;
-	/** @var bool */
-	private $doDbTouch;
-	/** @var int */
-	private $delay;
-
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( "Send purge requests for listed pages to CDN.\n"
-			. "By default this expects a list of URLs or page names from STDIN. "
-			. "To query the database for input, use --namespace or --all-namespaces instead."
-		);
-		$this->addOption( 'namespace', 'Purge pages with this namespace number', false, true );
-		$this->addOption( 'all-namespaces', 'Purge pages in all namespaces', false, false );
-		$this->addOption( 'db-touch',
-			"Update the page.page_touched database field.\n"
-				. "This is only considered when purging by title, not when purging by namespace or URL.",
-			false,
-			false
-		);
-		$this->addOption( 'delay', 'Number of seconds to delay between each purge', false, true );
-		$this->addOption( 'verbose', 'Show more output', false, false, 'v' );
+		$this->mDescription = "Send purge requests for listed pages to squid";
+		$this->addOption( 'purge', 'Whether to update page_touched.' , false, false );
+		$this->addOption( 'namespace', 'Namespace number', false, true );
 		$this->setBatchSize( 100 );
 	}
 
 	public function execute() {
-		$this->namespaceId = $this->getOption( 'namespace' );
-		$this->allNamespaces = $this->hasOption( 'all-namespaces' );
-		$this->doDbTouch = $this->hasOption( 'db-touch' );
-		$this->delay = intval( $this->getOption( 'delay', '0' ) );
-
-		if ( $this->allNamespaces ) {
-			$this->purgeNamespace( false );
-		} elseif ( $this->namespaceId !== null ) {
-			$this->purgeNamespace( intval( $this->namespaceId ) );
+		if( $this->hasOption( 'namespace' ) ) {
+			$this->purgeNamespace();
 		} else {
-			$this->doPurge();
+			$this->purgeList();
 		}
 		$this->output( "Done!\n" );
 	}
 
-	/**
-	 * Purge URL coming from stdin
-	 */
-	private function doPurge() {
+	/** Purge URL coming from stdin */
+	private function purgeList() {
 		$stdin = $this->getStdin();
-		$urls = [];
-		$htmlCacheUpdater = $this->getServiceContainer()->getHTMLCacheUpdater();
+		$urls = array();
 
 		while ( !feof( $stdin ) ) {
 			$page = trim( fgets( $stdin ) );
@@ -79,15 +52,10 @@ class PurgeList extends Maintenance {
 			} elseif ( $page !== '' ) {
 				$title = Title::newFromText( $page );
 				if ( $title ) {
-					$newUrls = $htmlCacheUpdater->getUrls( $title );
-
-					foreach ( $newUrls as $url ) {
-						$this->output( "$url\n" );
-					}
-
-					$urls = array_merge( $urls, $newUrls );
-
-					if ( $this->doDbTouch ) {
+					$url = $title->getInternalUrl();
+					$this->output( "$url\n" );
+					$urls[] = $url;
+					if ( $this->getOption( 'purge' ) ) {
 						$title->invalidateCache();
 					}
 				} else {
@@ -95,77 +63,70 @@ class PurgeList extends Maintenance {
 				}
 			}
 		}
-		$this->output( "Purging " . count( $urls ) . " urls\n" );
 		$this->sendPurgeRequest( $urls );
 	}
 
-	/**
-	 * Purge a namespace or all pages
-	 *
-	 * @param int|bool $namespace
-	 */
-	private function purgeNamespace( $namespace = false ) {
-		if ( $this->doDbTouch ) {
-			// NOTE: If support for this is added in the future,
-			// it MUST NOT be allowed when $wgMiserMode is enabled.
-			// Change this to a check and error about instead! (T263957)
-			$this->fatalError( 'The --db-touch option is not supported when purging by namespace.' );
-		}
+	/** Purge a namespace given by --namespace */
+	private function purgeNamespace() {
+		$dbr = wfGetDB( DB_SLAVE );
+		$ns = $dbr->addQuotes( $this->getOption( 'namespace') );
 
-		$dbr = $this->getReplicaDB();
-		$htmlCacheUpdater = $this->getServiceContainer()->getHTMLCacheUpdater();
-		$startId = 0;
-		if ( $namespace === false ) {
-			$conds = [];
-		} else {
-			$conds = [ 'page_namespace' => $namespace ];
-		}
-		while ( true ) {
-			$res = $dbr->newSelectQueryBuilder()
-				->select( [ 'page_id', 'page_namespace', 'page_title' ] )
-				->from( 'page' )
-				->where( $conds )
-				->andWhere( $dbr->expr( 'page_id', '>', $startId ) )
-				->orderBy( 'page_id' )
-				->limit( $this->getBatchSize() )
-				->caller( __METHOD__ )->fetchResultSet();
-			if ( !$res->numRows() ) {
-				break;
-			}
-			$urls = [];
-			foreach ( $res as $row ) {
+		$result = $dbr->select(
+			array( 'page' ),
+			array( 'page_namespace', 'page_title' ),
+			array( "page_namespace = $ns" ),
+			__METHOD__,
+			array( 'ORDER BY' => 'page_id' )
+		);
+
+		$start   = 0;
+		$end = $dbr->numRows( $result );
+		$this->output( "Will purge $end pages from namespace $ns\n" );
+
+		# Do remaining chunk
+		$end += $this->mBatchSize - 1;
+		$blockStart = $start;
+		$blockEnd = $start + $this->mBatchSize - 1;
+
+		while( $blockEnd <= $end ) {
+			# Select pages we will purge:
+			$result = $dbr->select(
+				array( 'page' ),
+				array( 'page_namespace', 'page_title' ),
+				array( "page_namespace = $ns" ),
+				__METHOD__,
+				array( # conditions
+					'ORDER BY' => 'page_id',
+					'LIMIT'    => $this->mBatchSize,
+					'OFFSET'   => $blockStart,
+				)
+			);
+			# Initialize/reset URLs to be purged
+			$urls = array();
+			foreach( $result as $row ) {
 				$title = Title::makeTitle( $row->page_namespace, $row->page_title );
-				$urls = array_merge( $urls, $htmlCacheUpdater->getUrls( $title ) );
-				$startId = $row->page_id;
+				$url = $title->getInternalUrl();
+				$urls[] = $url;
 			}
+
 			$this->sendPurgeRequest( $urls );
+
+			$blockStart += $this->mBatchSize;
+			$blockEnd   += $this->mBatchSize;
 		}
 	}
 
 	/**
 	 * Helper to purge an array of $urls
-	 * @param array $urls List of URLS to purge from CDNs
+	 * @param $urls array List of URLS to purge from squids
 	 */
 	private function sendPurgeRequest( $urls ) {
-		$hcu = $this->getServiceContainer()->getHTMLCacheUpdater();
-		if ( $this->delay > 0 ) {
-			foreach ( $urls as $url ) {
-				if ( $this->hasOption( 'verbose' ) ) {
-					$this->output( $url . "\n" );
-				}
-				$hcu->purgeUrls( $url, $hcu::PURGE_NAIVE );
-				sleep( $this->delay );
-			}
-		} else {
-			if ( $this->hasOption( 'verbose' ) ) {
-				$this->output( implode( "\n", $urls ) . "\n" );
-			}
-			$hcu->purgeUrls( $urls, $hcu::PURGE_NAIVE );
-		}
+		$this->output( "Purging " . count( $urls ). " urls\n" );
+		$u = new SquidUpdate( $urls );
+		$u->doUpdate();
 	}
+
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = PurgeList::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "PurgeList";
+require_once( RUN_MAINTENANCE_IF_MAIN );

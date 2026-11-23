@@ -1,80 +1,58 @@
 <?php
 /**
- * Outputs page text to stdout.
- * Useful for command-line editing automation.
+ * Outputs page text to stdout, useful for command-line editing automation.
  * Example: php getText.php "page title" | sed -e '...' | php edit.php "page title"
  *
- * @license GPL-2.0-or-later
- * @file
- * @ingroup Maintenance
- */
-
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Revision\RevisionRecord;
-use MediaWiki\Revision\SlotRecord;
-use MediaWiki\Title\Title;
-
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that outputs page text to stdout.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
  *
  * @ingroup Maintenance
  */
+
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
+
 class GetTextMaint extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Outputs page text to stdout' );
+		$this->mDescription = 'Outputs page text to stdout';
 		$this->addOption( 'show-private', 'Show the text even if it\'s not available to the public' );
 		$this->addArg( 'title', 'Page title' );
-		$this->addOption( 'revision', 'Revision ID', false, true );
 	}
 
 	public function execute() {
+		$this->db = wfGetDB( DB_SLAVE );
+
 		$titleText = $this->getArg( 0 );
 		$title = Title::newFromText( $titleText );
 		if ( !$title ) {
-			$this->fatalError( "$titleText is not a valid title.\n" );
+			$this->error( "$titleText is not a valid title.\n", true );
 		}
 
-		if ( !$title->exists() ) {
-			$titleText = $title->getPrefixedText();
-			$this->fatalError( "Page $titleText does not exist.\n" );
-		}
-
-		$revId = (int)$this->getOption( 'revision', $title->getLatestRevID() );
-
-		$rev = $this->getServiceContainer()
-			->getRevisionLookup()
-			->getRevisionByTitle( $title, $revId );
-
+		$rev = Revision::newFromTitle( $title );
 		if ( !$rev ) {
 			$titleText = $title->getPrefixedText();
-			$this->fatalError( "Could not load revision $revId of $titleText.\n" );
+			$this->error( "Page $titleText does not exist.\n", true );
 		}
-
-		$audience = $this->hasOption( 'show-private' ) ?
-			RevisionRecord::RAW :
-			RevisionRecord::FOR_PUBLIC;
-		$content = $rev->getContent( SlotRecord::MAIN, $audience );
-
-		if ( $content === null ) {
+		$text = $rev->getText( $this->hasOption( 'show-private' ) ? Revision::RAW : Revision::FOR_PUBLIC );
+		if ( $text === false ) {
 			$titleText = $title->getPrefixedText();
-			$this->fatalError( "Couldn't extract the text from $titleText.\n" );
+			$this->error( "Couldn't extract the text from $titleText.\n", true );
 		}
-		$this->output( $content->serialize() );
-
-		if ( stream_isatty( STDOUT ) ) {
-			// When writing to a TTY, add a linebreak, to keep the terminal output tidy.
-			// Wikitext will generally not have a trailing newline.
-			$this->output( "\n" );
-		}
+		$this->output( $text );
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = GetTextMaint::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "GetTextMaint";
+require_once( RUN_MAINTENANCE_IF_MAIN );

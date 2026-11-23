@@ -1,35 +1,43 @@
 <?php
 /**
- * @license GPL-2.0-or-later
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @file
  * @ingroup Maintenance ExternalStorage
  */
 
-use MediaWiki\Maintenance\Maintenance;
-
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/../Maintenance.php';
-// @codeCoverageIgnoreEnd
+require_once( dirname( __FILE__ ) . '/../Maintenance.php' );
 
 class StorageTypeStats extends Maintenance {
-	public function execute() {
-		$dbr = $this->getReplicaDB();
+	function execute() {
+		$dbr = wfGetDB( DB_SLAVE );
 
-		$endId = $dbr->newSelectQueryBuilder()
-			->select( 'MAX(old_id)' )
-			->from( 'text' )
-			->caller( __METHOD__ )->fetchField();
+		$endId = $dbr->selectField( 'text', 'MAX(old_id)', false, __METHOD__ );
 		if ( !$endId ) {
-			$this->fatalError( 'No text rows!' );
+			echo "No text rows!\n";
+			exit( 1 );
 		}
 
-		$binSize = intval( 10 ** ( floor( log10( $endId ) ) - 3 ) );
+		$binSize = intval( pow( 10, floor( log10( $endId ) ) - 3 ) );
 		if ( $binSize < 100 ) {
 			$binSize = 100;
 		}
 		echo "Using bin size of $binSize\n";
 
-		$stats = [];
+		$stats = array();
 
 		$classSql = <<<SQL
 			IF(old_flags LIKE '%external%',
@@ -51,16 +59,23 @@ class StorageTypeStats extends Maintenance {
 SQL;
 
 		for ( $rangeStart = 0; $rangeStart < $endId; $rangeStart += $binSize ) {
-			if ( intdiv( $rangeStart, $binSize ) % 10 === 0 ) {
+			if ( $rangeStart / $binSize % 10 == 0 ) {
 				echo "$rangeStart\r";
 			}
-			$res = $dbr->newSelectQueryBuilder()
-				->select( [ 'old_flags', 'class' => $classSql, 'count' => 'COUNT(*)' ] )
-				->from( 'text' )
-				->where( $dbr->expr( 'old_id', '>=', intval( $rangeStart ) ) )
-				->andWhere( $dbr->expr( 'old_id', '<', intval( $rangeStart + $binSize ) ) )
-				->groupBy( [ 'old_flags', 'class' ] )
-				->caller( __METHOD__ )->fetchResultSet();
+			$res = $dbr->select(
+				'text',
+				array(
+					'old_flags',
+					"$classSql AS class",
+					'COUNT(*) as count',
+				),
+				array(
+					'old_id >= ' . intval( $rangeStart ),
+					'old_id < ' . intval( $rangeStart + $binSize )
+				),
+				__METHOD__,
+				array( 'GROUP BY' => 'old_flags, class' )
+			);
 
 			foreach ( $res as $row ) {
 				$flags = $row->old_flags;
@@ -70,11 +85,11 @@ SQL;
 				$class = $row->class;
 				$count = $row->count;
 				if ( !isset( $stats[$flags][$class] ) ) {
-					$stats[$flags][$class] = [
+					$stats[$flags][$class] = array(
 						'count' => 0,
 						'first' => $rangeStart,
 						'last' => 0
-					];
+					);
 				}
 				$entry =& $stats[$flags][$class];
 				$entry['count'] += $count;
@@ -96,7 +111,6 @@ SQL;
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = StorageTypeStats::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = 'StorageTypeStats';
+require_once( RUN_MAINTENANCE_IF_MAIN );
+

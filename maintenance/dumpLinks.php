@@ -1,5 +1,8 @@
 <?php
 /**
+ * Copyright (C) 2005 Brion Vibber <brion@pobox.com>
+ * http://www.mediawiki.org/
+ *
  * Quick demo hack to generate a plaintext link dump,
  * per the proposed wiki link database standard:
  * http://www.usemod.com/cgi-bin/mb.pl?LinkDatabase
@@ -8,76 +11,63 @@
  * Does not include interwiki or URL links.
  * Dumps ASCII text to stdout; command-line.
  *
- * Copyright © 2005 Brooke Vibber <bvibber@wikimedia.org>
- * https://www.mediawiki.org/
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- * @license GPL-2.0-or-later
- * @file
- * @ingroup Maintenance
- */
-
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-use MediaWiki\Deferred\LinksUpdate\PageLinksTable;
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Title\Title;
-
-/**
- * Maintenance script that generates a plaintext link dump.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
  *
  * @ingroup Maintenance
  */
+
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
+
 class DumpLinks extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( 'Quick demo hack to generate a plaintext link dump' );
+		$this->mDescription = "Quick demo hack to generate a plaintext link dump";
 	}
 
 	public function execute() {
-		$dbr = $this->getServiceContainer()
-			->getConnectionProvider()
-			->getReplicaDatabase( PageLinksTable::VIRTUAL_DOMAIN );
-		$linksMigration = $this->getServiceContainer()->getLinksMigration();
-		$queryInfo = $linksMigration->getQueryInfo( 'pagelinks' );
-		$queryInfo['tables'] = array_diff( $queryInfo['tables'], [ 'pagelinks' ] );
-		[ $blNamespace, $blTitle ] = $linksMigration->getTitleFields( 'pagelinks' );
-
-		$result = $dbr->newSelectQueryBuilder()
-			->select( array_merge( [
+		$dbr = wfGetDB( DB_SLAVE );
+		$result = $dbr->select( array( 'pagelinks', 'page' ),
+			array(
 				'page_id',
 				'page_namespace',
 				'page_title',
-			], $queryInfo['fields'] ) )
-			->from( 'page' )
-			->join( 'pagelinks', null, [ 'page_id=pl_from' ] )
-			->joinConds( $queryInfo['joins'] )
-			->tables( $queryInfo['tables'] )
-			->orderBy( 'page_id' )
-			->caller( __METHOD__ )
-			->fetchResultSet();
+				'pl_namespace',
+				'pl_title' ),
+			array( 'page_id=pl_from' ),
+			__METHOD__,
+			array( 'ORDER BY' => 'page_id' ) );
 
 		$lastPage = null;
 		foreach ( $result as $row ) {
 			if ( $lastPage != $row->page_id ) {
-				if ( $lastPage !== null ) {
+				if ( isset( $lastPage ) ) {
 					$this->output( "\n" );
 				}
 				$page = Title::makeTitle( $row->page_namespace, $row->page_title );
-				$this->output( $page->getPrefixedURL() );
+				$this->output( $page->getPrefixedUrl() );
 				$lastPage = $row->page_id;
 			}
-			$link = Title::makeTitle( $row->$blNamespace, $row->$blTitle );
-			$this->output( " " . $link->getPrefixedURL() );
+			$link = Title::makeTitle( $row->pl_namespace, $row->pl_title );
+			$this->output( " " . $link->getPrefixedUrl() );
 		}
-		if ( $lastPage !== null ) {
+		if ( isset( $lastPage ) )
 			$this->output( "\n" );
-		}
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = DumpLinks::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "DumpLinks";
+require_once( RUN_MAINTENANCE_IF_MAIN );
+

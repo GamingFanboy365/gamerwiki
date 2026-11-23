@@ -6,46 +6,38 @@
  *
  * Templates etc are pulled from the local wiki database, not from the dump.
  *
- * Copyright (C) 2006 Brooke Vibber <bvibber@wikimedia.org>
- * https://www.mediawiki.org/
+ * Copyright (C) 2006 Brion Vibber <brion@pobox.com>
+ * http://www.mediawiki.org/
  *
- * @license GPL-2.0-or-later
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @file
  * @ingroup Maintenance
  */
 
-use MediaWiki\Import\ImportStreamSource;
-use MediaWiki\Import\WikiRevision;
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Parser\ParserOptions;
-use MediaWiki\Permissions\UltimateAuthority;
-use MediaWiki\Revision\MutableRevisionRecord;
-use MediaWiki\User\User;
-use Wikimedia\Timestamp\ConvertibleTimestamp;
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that takes page text out of an XML dump file
- * and render basic HTML out to files.
- *
- * @ingroup Maintenance
- */
 class DumpRenderer extends Maintenance {
 
-	/** @var int */
 	private $count = 0;
-	private string $outputDirectory;
-	private float $startTime;
-	/** @var string */
-	private $prefix;
+	private $outputDirectory, $startTime;
 
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription(
-			'Take page text out of an XML dump file and render basic HTML out to files' );
+		$this->mDescription = "Take page text out of an XML dump file and render basic HTML out to files";
 		$this->addOption( 'output-dir', 'The directory to output the HTML files to', true, true );
 		$this->addOption( 'prefix', 'Prefix for the rendered files (defaults to wiki)', false, true );
 		$this->addOption( 'parser', 'Use an alternative parser class', false, true );
@@ -54,46 +46,39 @@ class DumpRenderer extends Maintenance {
 	public function execute() {
 		$this->outputDirectory = $this->getOption( 'output-dir' );
 		$this->prefix = $this->getOption( 'prefix', 'wiki' );
-		$this->startTime = ConvertibleTimestamp::hrtime();
+		$this->startTime = wfTime();
 
 		if ( $this->hasOption( 'parser' ) ) {
-			$this->prefix .= '-' . $this->getOption( 'parser' );
-			// T236809: We'll need to provide an alternate ParserFactory
-			// service to make this work.
-			$this->fatalError( 'Parser class configuration temporarily disabled.' );
+			global $wgParserConf;
+			$wgParserConf['class'] = $this->getOption( 'parser' );
+			$this->prefix .= "-{$wgParserConf['class']}";
 		}
 
-		$user = User::newSystemUser( User::MAINTENANCE_SCRIPT_USER, [ 'steal' => true ] );
-
 		$source = new ImportStreamSource( $this->getStdin() );
-		$importer = $this->getServiceContainer()
-			->getWikiImporterFactory()
-			->getWikiImporter( $source, new UltimateAuthority( $user ) );
+		$importer = new WikiImporter( $source );
 
 		$importer->setRevisionCallback(
-			$this->handleRevision( ... ) );
-		$importer->setNoticeCallback( static function ( $msg, $params ) {
-			echo wfMessage( $msg, $params )->text() . "\n";
-		} );
+			array( &$this, 'handleRevision' ) );
 
 		$importer->doImport();
 
-		$delta = ( ConvertibleTimestamp::hrtime() - $this->startTime ) / 1e9;
-		$this->error( "Rendered {$this->count} pages in " . round( $delta, 2 ) . " seconds " );
-		if ( $delta > 0 ) {
-			$this->error( round( $this->count / $delta, 2 ) . " pages/sec" );
-		}
+		$delta = wfTime() - $this->startTime;
+		$this->error( "Rendered {$this->count} pages in " . round($delta, 2) . " seconds " );
+		if ($delta > 0)
+			$this->error( round($this->count / $delta, 2) . " pages/sec" );
 		$this->error( "\n" );
 	}
 
 	/**
 	 * Callback function for each revision, turn into HTML and save
+	 * @param $rev Revision
 	 */
-	public function handleRevision( WikiRevision $rev ) {
+	public function handleRevision( $rev ) {
+		global $wgParserConf;
+
 		$title = $rev->getTitle();
 		if ( !$title ) {
 			$this->error( "Got bogus revision with null title!" );
-
 			return;
 		}
 		$display = $title->getPrefixedText();
@@ -106,41 +91,28 @@ class DumpRenderer extends Maintenance {
 			$this->prefix,
 			$this->count,
 			$sanitized );
-		$this->output( sprintf( "%s\t%s\n", $filename, $display ) );
+		$this->output( sprintf( "%s\n", $filename, $display ) );
 
 		$user = new User();
+		$parser = new $wgParserConf['class']();
 		$options = ParserOptions::newFromUser( $user );
 
-		$content = $rev->getContent();
-		$contentRenderer = $this->getServiceContainer()->getContentRenderer();
-		// ContentRenderer expects a RevisionRecord, and all we have is a
-		// WikiRevision from the dump.  Make a fake MutableRevisionRecord to
-		// satisfy it -- the only thing ::getParserOutput actually needs is
-		// the revision ID and revision timestamp.
-		$mutableRev = new MutableRevisionRecord( $rev->getTitle() );
-		$mutableRev->setId( $rev->getID() );
-		$mutableRev->setTimestamp( $rev->getTimestamp() );
-		$output = $contentRenderer->getParserOutput(
-			$content, $title, $mutableRev, $options
-		);
+		$output = $parser->parse( $rev->getText(), $title, $options );
 
 		file_put_contents( $filename,
-			"<!DOCTYPE html>\n" .
-			"<html lang=\"en\" dir=\"ltr\">\n" .
+			"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" " .
+			"\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n" .
+			"<html xmlns=\"http://www.w3.org/1999/xhtml\">\n" .
 			"<head>\n" .
-			"<meta charset=\"UTF-8\" />\n" .
-			"<meta name=\"color-scheme\" content=\"light dark\">" .
-			"<title>" . htmlspecialchars( $display, ENT_COMPAT ) . "</title>\n" .
+			"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n" .
+			"<title>" . htmlspecialchars( $display ) . "</title>\n" .
 			"</head>\n" .
 			"<body>\n" .
-			// TODO T371004 move runOutputPipeline out of $parserOutput
-			$output->runOutputPipeline( $options, [] )->getContentHolderText() .
+			$output->getText() .
 			"</body>\n" .
 			"</html>" );
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = DumpRenderer::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "DumpRenderer";
+require_once( RUN_MAINTENANCE_IF_MAIN );

@@ -1,58 +1,46 @@
 <?php
 /**
- * Communications protocol.
+ * Communications protocol...
  * This is used by dumpTextPass.php when the --spawn option is present.
  *
- * @license GPL-2.0-or-later
- * @file
- * @ingroup Maintenance
- */
-
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\MediaWikiServices;
-use MediaWiki\Storage\BlobAccessException;
-use MediaWiki\Storage\BlobStore;
-use MediaWiki\Storage\SqlBlobStore;
-
-/**
- * Maintenance script used to fetch page text in a subprocess.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
  *
  * @ingroup Maintenance
  */
-class FetchText extends Maintenance {
 
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
+
+class FetchText extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( "Fetch the raw revision blob from a blob address.\n" .
-			"Integer IDs are interpreted as referring to text.old_id for backwards compatibility.\n" .
-			"NOTE: Export transformations are NOT applied. " .
-			"This is left to dumpTextPass.php"
-		);
-	}
-
-	/**
-	 * @return BlobStore
-	 */
-	private function getBlobStore() {
-		return $this->getServiceContainer()->getBlobStore();
+		$this->mDescription = "Fetch the revision text from an old_id";
 	}
 
 	/**
 	 * returns a string containing the following in order:
-	 *   textid
-	 *   \n
-	 *   length of text (-1 on error = failure to retrieve/unserialize/gunzip/etc)
-	 *   \n
-	 *   text  (may be empty)
+	 *	 textid
+	 *	 \n
+	 *	 length of text (-1 on error = failure to retrieve/unserialize/gunzip/etc)
+	 *	 \n
+	 *	 text  (may be empty)
 	 *
-	 * note that the text string itself is *not* followed by newline
+	 * note that that the text string itself is *not* followed by newline
 	 */
-	public function execute() {
-		MediaWikiServices::getInstance()->getDBLoadBalancerFactory()->setDefaultGroupName( 'dump' );
+	 public function execute() {
+		$db = wfGetDB( DB_SLAVE );
 		$stdin = $this->getStdin();
 		while ( !feof( $stdin ) ) {
 			$line = fgets( $stdin );
@@ -60,29 +48,38 @@ class FetchText extends Maintenance {
 				// We appear to have lost contact...
 				break;
 			}
-			$blobAddress = trim( $line );
-
-			// Plain integers are supported for backwards compatibility with pre-MCR dumps.
-			if ( !str_contains( $blobAddress, ':' ) && is_numeric( $blobAddress ) ) {
-				$blobAddress = SqlBlobStore::makeAddressFromTextId( intval( $blobAddress ) );
+			$textId = intval( $line );
+			$text = $this->doGetText( $db, $textId );
+			if ($text === false) {
+				# actual error, not zero-length text
+				$textLen = "-1";
 			}
-
-			try {
-				$text = $this->getBlobStore()->getBlob( $blobAddress );
-				$textLen = strlen( $text );
-			} catch ( BlobAccessException | InvalidArgumentException ) {
-				// XXX: log $ex to stderr?
-				$textLen = '-1';
-				$text = '';
+			else {
+				$textLen = strlen($text);
 			}
-
-			$this->output( $blobAddress . "\n" . $textLen . "\n" . $text );
+			$this->output( $textId . "\n" . $textLen . "\n" . $text );
 		}
 	}
 
+	/**
+	 * May throw a database error if, say, the server dies during query.
+	 * @param $db DatabaseBase object
+	 * @param $id int The old_id
+	 * @return String
+	 */
+	private function doGetText( $db, $id ) {
+		$id = intval( $id );
+		$row = $db->selectRow( 'text',
+			array( 'old_text', 'old_flags' ),
+			array( 'old_id' => $id ),
+			__METHOD__ );
+		$text = Revision::getRevisionText( $row );
+		if ( $text === false ) {
+			return false;
+		}
+		return $text;
+	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = FetchText::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "FetchText";
+require_once( RUN_MAINTENANCE_IF_MAIN );

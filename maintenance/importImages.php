@@ -1,538 +1,340 @@
 <?php
+
 /**
- * Import one or more images from the local file system into the wiki without
- * using the web-based interface.
+ * Maintenance script to import one or more images from the local file system into
+ * the wiki without using the web-based interface.
  *
  * "Smart import" additions:
- * - aim: preserve the essential metadata (user, description) when importing media
- *   files from an existing wiki.
+ * - aim: preserve the essential metadata (user, description) when importing medias from an existing wiki
  * - process:
  *      - interface with the source wiki, don't use bare files only (see --source-wiki-url).
  *      - fetch metadata from source wiki for each file to import.
  *      - commit the fetched metadata to the destination wiki while submitting.
  *
- * @license GPL-2.0-or-later
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @file
  * @ingroup Maintenance
  * @author Rob Church <robchur@gmail.com>
  * @author Mij <mij@bitchx.it>
  */
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
+$optionsWithArgs = array( 'extensions', 'comment', 'comment-file', 'comment-ext', 'user', 'license', 'sleep', 'limit', 'from', 'source-wiki-url' );
+require_once( dirname( __FILE__ ) . '/commandLine.inc' );
+require_once( dirname( __FILE__ ) . '/importImages.inc' );
+$processed = $added = $ignored = $skipped = $overwritten = $failed = 0;
 
-use MediaWiki\ChangeTags\ChangeTags;
-use MediaWiki\MainConfigNames;
-use MediaWiki\Maintenance\Maintenance;
-use MediaWiki\Media\MediaHandler;
-use MediaWiki\Specials\SpecialUpload;
-use MediaWiki\Title\Title;
-use MediaWiki\User\User;
-use MediaWiki\Utils\MWFileProps;
-use Wikimedia\FileBackend\FSFile\FSFile;
+echo( "Import Images\n\n" );
 
-class ImportImages extends Maintenance {
-
-	public function __construct() {
-		parent::__construct();
-
-		$this->addDescription( 'Imports images and other media files into the wiki' );
-		$this->addArg( 'dir', 'Path to the directory containing images to be imported' );
-
-		$this->addOption( 'extensions',
-			'Comma-separated list of allowable extensions, defaults to $wgFileExtensions',
-			false,
-			true
-		);
-		$this->addOption( 'overwrite',
-			'Overwrite existing images with the same name (default is to skip them)' );
-		$this->addOption( 'limit',
-			'Limit the number of images to process. Ignored or skipped images are not counted',
-			false,
-			true
-		);
-		$this->addOption( 'from',
-			"Ignore all files until the one with the given name. Useful for resuming aborted "
-				. "imports. The name should be the file's canonical database form.",
-			false,
-			true
-		);
-		$this->addOption( 'skip-dupes',
-			'Skip images that were already uploaded under a different name (check SHA1)' );
-		$this->addOption( 'search-recursively', 'Search recursively for files in subdirectories' );
-		$this->addOption( 'sleep',
-			'Sleep between files. Useful mostly for debugging',
-			false,
-			true
-		);
-		$this->addOption( 'user',
-			"Set username of uploader, default 'Maintenance script'",
-			false,
-			true
-		);
-		// This parameter can optionally have an argument. If none specified, getOption()
-		// returns 1 which is precisely what we need.
-		$this->addOption( 'check-userblock', 'Check if the user got blocked during import' );
-		$this->addOption( 'comment',
-			"Set file description, default 'Importing file'",
-			false,
-			true
-		);
-		$this->addOption( 'comment-file',
-			'Set description to the content of this file',
-			false,
-			true
-		);
-		$this->addOption( 'comment-ext',
-			'Causes the description for each file to be loaded from a file with the same name, but '
-				. 'the extension provided. If a global description is also given, it is appended.',
-			false,
-			true
-		);
-		$this->addOption( 'summary',
-			'Upload summary, description will be used if not provided',
-			false,
-			true
-		);
-		$this->addOption( 'license',
-			'Use an optional license template',
-			false,
-			true
-		);
-		$this->addOption( 'timestamp',
-			'Override upload time/date, all MediaWiki timestamp formats are accepted',
-			false,
-			true
-		);
-		$this->addOption( 'protect',
-			'Specify the protect value (autoconfirmed,sysop)',
-			false,
-			true
-		);
-		$this->addOption( 'unprotect', 'Unprotects all uploaded images' );
-		$this->addOption( 'source-wiki-url',
-			'If specified, take User and Comment data for each imported file from this URL. '
-				. 'For example, --source-wiki-url="https://en.wikipedia.org/w/"',
-			false,
-			true
-		);
-		$this->addOption( 'dry', "Dry run, don't import anything" );
-	}
-
-	/** @inheritDoc */
-	public function execute() {
-		$services = $this->getServiceContainer();
-		$permissionManager = $services->getPermissionManager();
-
-		$found = 0;
-		$processed = 0;
-		$statistics = [
-			'ignored' => 0,
-			'added' => 0,
-			'skipped' => 0,
-			'overwritten' => 0,
-			'failed' => 0,
-		];
-
-		$this->output( "Importing Files\n\n" );
-
-		$dir = $this->getArg( 0 );
-
-		# Check Protection
-		if ( $this->hasOption( 'protect' ) && $this->hasOption( 'unprotect' ) ) {
-			$this->fatalError( "Cannot specify both protect and unprotect.  Only 1 is allowed.\n" );
-		}
-
-		if ( $this->hasOption( 'protect' ) && trim( $this->getOption( 'protect' ) ) ) {
-			$this->fatalError( "You must specify a protection option.\n" );
-		}
-
-		# Prepare the list of allowed extensions
-		$extensions = $this->hasOption( 'extensions' )
-			? explode( ',', strtolower( $this->getOption( 'extensions' ) ) )
-			: $this->getConfig()->get( MainConfigNames::FileExtensions );
-
-		# Search the path provided for candidates for import
-		$files = $this->findFiles( $dir, $extensions, $this->hasOption( 'search-recursively' ) );
-		if ( !$files->valid() ) {
-			$this->output( "No suitable files could be found for import.\n" );
-			return false;
-		}
-
-		# Initialise the user for this operation
-		$user = $this->hasOption( 'user' )
-			? User::newFromName( $this->getOption( 'user' ) )
-			: User::newSystemUser( User::MAINTENANCE_SCRIPT_USER, [ 'steal' => true ] );
-		if ( !$user instanceof User ) {
-			$user = User::newSystemUser( User::MAINTENANCE_SCRIPT_USER, [ 'steal' => true ] );
-		}
-		'@phan-var User $user';
-
-		# Get block check. If a value is given, this specified how often the check is performed
-		$checkUserBlock = (int)$this->getOption( 'check-userblock' );
-
-		$from = $this->getOption( 'from' );
-		$sleep = (int)$this->getOption( 'sleep' );
-		$limit = (int)$this->getOption( 'limit' );
-		$timestamp = $this->getOption( 'timestamp', false );
-
-		# Get the upload comment. Provide a default one in case there's no comment given.
-		$commentFile = $this->getOption( 'comment-file' );
-		if ( $commentFile !== null ) {
-			$comment = file_get_contents( $commentFile );
-			if ( $comment === false || $comment === null ) {
-				$this->fatalError( "failed to read comment file: {$commentFile}\n" );
-			}
-		} else {
-			$comment = $this->getOption( 'comment', 'Importing file' );
-		}
-		$commentExt = $this->getOption( 'comment-ext' );
-		$summary = $this->getOption( 'summary', '' );
-		$license = $this->getOption( 'license', '' );
-		$sourceWikiUrl = $this->getOption( 'source-wiki-url' );
-
-		$tags = in_array(
-			ChangeTags::TAG_SERVER_SIDE_UPLOAD,
-			$this->getServiceContainer()->getChangeTagsStore()->getSoftwareTags()
-		)
-			? [ ChangeTags::TAG_SERVER_SIDE_UPLOAD ]
-			: [];
-
-		# Batch "upload" operation
-		$restrictionStore = $services->getRestrictionStore();
-		foreach ( $files as $file ) {
-			$found++;
-			if ( $sleep && ( $processed > 0 ) ) {
-				sleep( $sleep );
-			}
-
-			$base = UtfNormal\Validator::cleanUp( wfBaseName( $file ) );
-
-			# Validate a title
-			$title = Title::makeTitleSafe( NS_FILE, $base );
-			if ( !$title ) {
-				$this->output(
-					"{$base} could not be imported; a valid title cannot be produced\n"
-				);
-				continue;
-			}
-
-			if ( $from ) {
-				if ( $from !== $title->getDBkey() ) {
-					$statistics['ignored']++;
-					continue;
-				}
-				// Found the requested file, continue from here
-				$from = null;
-			}
-
-			if ( $checkUserBlock && ( ( $processed % $checkUserBlock ) == 0 ) ) {
-				$user->clearInstanceCache( 'name' ); // reload from DB!
-				if ( $permissionManager->isBlockedFrom( $user, $title ) ) {
-					$this->output(
-						"{$user->getName()} is blocked from {$title->getPrefixedText()}! skipping.\n"
-					);
-					$statistics['skipped']++;
-					continue;
-				}
-			}
-
-			# Check existence
-			$image = $services->getRepoGroup()->getLocalRepo()
-				->newFile( $title );
-			if ( $image->exists() ) {
-				if ( $this->hasOption( 'overwrite' ) ) {
-					$this->output( "{$base} exists, overwriting..." );
-					$svar = 'overwritten';
-				} else {
-					$this->output( "{$base} exists, skipping\n" );
-					$statistics['skipped']++;
-					continue;
-				}
-			} else {
-				if ( $this->hasOption( 'skip-dupes' ) ) {
-					$repo = $image->getRepo();
-					# XXX: we end up calculating this again when actually uploading. that sucks.
-					$sha1 = FSFile::getSha1Base36FromPath( $file );
-					$dupes = $repo->findBySha1( $sha1 );
-					if ( $dupes ) {
-						$this->output(
-							"{$base} already exists as {$dupes[0]->getName()}, skipping\n"
-						);
-						$statistics['skipped']++;
-						continue;
-					}
-				}
-
-				$this->output( "Importing {$base}..." );
-				$svar = 'added';
-			}
-
-			if ( $sourceWikiUrl ) {
-				/* find comment text directly from source wiki, through MW's API */
-				$real_comment = $this->getFileCommentFromSourceWiki( $sourceWikiUrl, $base );
-				$commentText = $real_comment !== false ? $real_comment : $comment;
-
-				/* find user directly from source wiki, through MW's API */
-				$real_user = $this->getFileUserFromSourceWiki( $sourceWikiUrl, $base );
-				if ( $real_user !== false ) {
-					$realUser = User::newFromName( $real_user );
-					if ( $realUser === false ) {
-						# user does not exist in target wiki
-						$this->output(
-							"failed: user '$real_user' does not exist in target wiki."
-						);
-						continue;
-					}
-					$user = $realUser;
-				}
-			} else {
-				# Find comment text
-				$commentText = false;
-
-				if ( $commentExt ) {
-					$f = $this->findAuxFile( $file, $commentExt );
-					if ( !$f ) {
-						$this->output( " No comment file with extension {$commentExt} found "
-							. "for {$file}, using default comment." );
-					} else {
-						$commentText = file_get_contents( $f );
-						if ( !$commentText ) {
-							$this->output(
-								" Failed to load comment file {$f}, using default comment."
-							);
-						}
-					}
-				}
-
-				if ( !$commentText ) {
-					$commentText = $comment;
-				}
-			}
-
-			# Import the file
-			if ( $this->hasOption( 'dry' ) ) {
-				$this->output(
-					" publishing {$file} by '{$user->getName()}', comment '$commentText'..."
-				);
-			} else {
-				$mwProps = new MWFileProps( $services->getMimeAnalyzer() );
-				$props = $mwProps->getPropsFromPath( $file, true );
-				$flags = 0;
-				$publishOptions = [];
-				$handler = MediaHandler::getHandler( $props['mime'] );
-				if ( $handler ) {
-					$publishOptions['headers'] = $handler->getContentHeaders( $props['metadata'] );
-				} else {
-					$publishOptions['headers'] = [];
-				}
-				$archive = $image->publish( $file, $flags, $publishOptions );
-				if ( !$archive->isGood() ) {
-					$this->output( "failed. (" .
-						$archive->getMessage( false, false, 'en' )->text() .
-						")\n" );
-					$statistics['failed']++;
-					continue;
-				}
-			}
-
-			$commentText = SpecialUpload::getInitialPageText( $commentText, $license );
-			if ( !$this->hasOption( 'summary' ) ) {
-				$summary = $commentText;
-			}
-
-			if ( $this->hasOption( 'dry' ) ) {
-				$this->output( "done.\n" );
-			} else {
-				$uploadStatus = $image->recordUpload3(
-				// @phan-suppress-next-line PhanPossiblyUndeclaredVariable
-					$archive->value,
-					$summary,
-					$commentText,
-					$user,
-					// @phan-suppress-next-line PhanPossiblyUndeclaredVariable
-					$props,
-					$timestamp,
-					$tags
-				);
-
-				if ( $uploadStatus->isOK() ) {
-					$this->output( "done.\n" );
-
-					$doProtect = false;
-
-					$protectLevel = $this->getOption( 'protect' );
-					$restrictionLevels = $this->getConfig()->get( MainConfigNames::RestrictionLevels );
-
-					if ( $protectLevel && in_array( $protectLevel, $restrictionLevels ) ) {
-						$doProtect = true;
-					}
-					if ( $this->hasOption( 'unprotect' ) ) {
-						$protectLevel = '';
-						$doProtect = true;
-					}
-
-					if ( $doProtect ) {
-						# Protect the file
-						$this->output( "\nWaiting for replica DBs...\n" );
-						// Wait for replica DBs.
-						sleep( 2 ); # Why this sleep?
-						$this->waitForReplication();
-
-						$this->output( "\nSetting image restrictions ..." );
-
-						$cascade = false;
-						$restrictions = [];
-						foreach ( $restrictionStore->listApplicableRestrictionTypes( $title ) as $type ) {
-							$restrictions[$type] = $protectLevel;
-						}
-
-						$page = $services->getWikiPageFactory()->newFromTitle( $title );
-						$status = $page->doUpdateRestrictions( $restrictions, [], $cascade, '', $user );
-						$this->output( ( $status->isOK() ? 'done' : 'failed' ) . "\n" );
-					}
-				} elseif ( $uploadStatus->hasMessage( 'fileexists-no-change' ) ) {
-					$this->output( "skipped. (fileexists-no-change)\n" );
-					$svar = 'skipped';
-				} else {
-					$errors = $uploadStatus->getMessages( 'error' );
-					$firstErrorKey = ( $errors !== [] ) ? $errors[0]->getKey() : 'unknown error at recordUpload';
-					$this->output( "failed. ($firstErrorKey)\n" );
-					$svar = 'failed';
-				}
-			}
-
-			$statistics[$svar]++;
-			$processed++;
-
-			if ( $limit && $processed >= $limit ) {
-				break;
-			}
-		}
-
-		# Print out some statistics
-		$this->output( "\n" );
-		foreach ( array_merge(
-			[
-				'Found' => $found,
-				'Limit' => $limit,
-			],
-			$statistics
-		) as $desc => $number ) {
-			if ( $number > 0 ) {
-				$this->output( ucfirst( $desc ) . ": $number\n" );
-			}
-		}
-
-		// Return true if there are no failed imports (= zero exit code), or
-		// return false if there are any failed imports (= non-zero exit code)
-		return $statistics['failed'] === 0;
-	}
-
-	/**
-	 * Search a directory for files with one of a set of extensions
-	 *
-	 * @param string $dir Path to directory to search
-	 * @param array $exts Array of lowercase extensions to search for
-	 * @param bool $recurse Search subdirectories recursively
-	 * @return \Generator<string> Generator that iterating filenames
-	 */
-	private function findFiles( $dir, $exts, $recurse = false ) {
-		$dhl = is_dir( $dir ) ? opendir( $dir ) : false;
-		if ( !$dhl ) {
-			return;
-		}
-
-		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
-		while ( ( $file = readdir( $dhl ) ) !== false ) {
-			if ( is_file( $dir . '/' . $file ) ) {
-				$ext = pathinfo( $file, PATHINFO_EXTENSION );
-				if ( in_array( strtolower( $ext ), $exts ) ) {
-					yield $dir . '/' . $file;
-				}
-			} elseif ( $recurse && is_dir( $dir . '/' . $file ) && $file !== '..' && $file !== '.' ) {
-				yield from $this->findFiles( $dir . '/' . $file, $exts, true );
-			}
-		}
-	}
-
-	/**
-	 * Find an auxiliary file with the given extension, matching
-	 * the given base file path. $maxStrip determines how many extensions
-	 * may be stripped from the original file name before appending the
-	 * new extension. For example, with $maxStrip = 1 (the default),
-	 * file files acme.foo.bar.txt and acme.foo.txt would be auxilliary
-	 * files for acme.foo.bar and the extension ".txt". With $maxStrip = 2,
-	 * acme.txt would also be acceptable.
-	 *
-	 * @param string $file Base path
-	 * @param string $auxExtension The extension to be appended to the base path
-	 * @param int $maxStrip The maximum number of extensions to strip from the base path (default: 1)
-	 * @return string|false
-	 */
-	private function findAuxFile( $file, $auxExtension, $maxStrip = 1 ) {
-		if ( !str_starts_with( $auxExtension, '.' ) ) {
-			$auxExtension = '.' . $auxExtension;
-		}
-
-		$d = dirname( $file );
-		$n = basename( $file );
-
-		while ( $maxStrip >= 0 ) {
-			$f = $d . '/' . $n . $auxExtension;
-
-			if ( file_exists( $f ) ) {
-				return $f;
-			}
-
-			$idx = strrpos( $n, '.' );
-			if ( !$idx ) {
-				break;
-			}
-
-			$n = substr( $n, 0, $idx );
-			$maxStrip--;
-		}
-
-		return false;
-	}
-
-	/**
-	 * @todo FIXME: Access the api in a better way and performing just one query
-	 * (preferably batching files too).
-	 *
-	 * @param string $wiki_host
-	 * @param string $file
-	 *
-	 * @return string|false
-	 */
-	private function getFileCommentFromSourceWiki( $wiki_host, $file ) {
-		$url = $wiki_host . '/api.php?action=query&format=xml&titles=File:'
-			. rawurlencode( $file ) . '&prop=imageinfo&&iiprop=comment';
-		$body = $this->getServiceContainer()->getHttpRequestFactory()->get( $url, [], __METHOD__ );
-		if ( preg_match( '#<ii comment="([^"]*)" />#', $body, $matches ) == 0 ) {
-			return false;
-		}
-
-		return html_entity_decode( $matches[1] );
-	}
-
-	/** @return string|false */
-	private function getFileUserFromSourceWiki( string $wiki_host, string $file ) {
-		$url = $wiki_host . '/api.php?action=query&format=xml&titles=File:'
-			. rawurlencode( $file ) . '&prop=imageinfo&&iiprop=user';
-		$body = $this->getServiceContainer()->getHttpRequestFactory()->get( $url, [], __METHOD__ );
-		if ( preg_match( '#<ii user="([^"]*)" />#', $body, $matches ) == 0 ) {
-			return false;
-		}
-
-		return html_entity_decode( $matches[1] );
-	}
-
+# Need a path
+if ( count( $args ) == 0 ) {
+	showUsage();
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = ImportImages::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$dir = $args[0];
+
+# Check Protection
+if ( isset( $options['protect'] ) && isset( $options['unprotect'] ) ) {
+	die( "Cannot specify both protect and unprotect.  Only 1 is allowed.\n" );
+}
+
+if ( isset( $options['protect'] ) && $options['protect'] == 1 ) {
+	die( "You must specify a protection option.\n" );
+}
+
+# Prepare the list of allowed extensions
+global $wgFileExtensions;
+$extensions = isset( $options['extensions'] )
+	? explode( ',', strtolower( $options['extensions'] ) )
+	: $wgFileExtensions;
+
+# Search the path provided for candidates for import
+$files = findFiles( $dir, $extensions );
+
+# Initialise the user for this operation
+$user = isset( $options['user'] )
+	? User::newFromName( $options['user'] )
+	: User::newFromName( 'Maintenance script' );
+if ( !$user instanceof User ) {
+	$user = User::newFromName( 'Maintenance script' );
+}
+$wgUser = $user;
+
+# Get block check. If a value is given, this specified how often the check is performed
+if ( isset( $options['check-userblock'] ) ) {
+	if ( !$options['check-userblock'] ) {
+		$checkUserBlock = 1;
+	} else {
+		$checkUserBlock = (int)$options['check-userblock'];
+	}
+} else {
+	$checkUserBlock = false;
+}
+
+# Get --from
+$from = @$options['from'];
+
+# Get sleep time.
+$sleep = @$options['sleep'];
+if ( $sleep ) {
+	$sleep = (int)$sleep;
+}
+
+# Get limit number
+$limit = @$options['limit'];
+if ( $limit ) {
+	$limit = (int)$limit;
+}
+
+# Get the upload comment. Provide a default one in case there's no comment given.
+$comment = 'Importing image file';
+
+if ( isset( $options['comment-file'] ) ) {
+	$comment =  file_get_contents( $options['comment-file'] );
+	if ( $comment === false || $comment === null ) {
+		die( "failed to read comment file: {$options['comment-file']}\n" );
+	}
+} elseif ( isset( $options['comment'] ) ) {
+	$comment =  $options['comment'];
+}
+
+$commentExt = isset( $options['comment-ext'] ) ? $options['comment-ext'] : false;
+
+# Get the license specifier
+$license = isset( $options['license'] ) ? $options['license'] : '';
+
+# Batch "upload" operation
+$count = count( $files );
+if ( $count > 0 ) {
+
+	foreach ( $files as $file ) {
+		$base = wfBaseName( $file );
+
+		# Validate a title
+		$title = Title::makeTitleSafe( NS_FILE, $base );
+		if ( !is_object( $title ) ) {
+			echo( "{$base} could not be imported; a valid title cannot be produced\n" );
+			continue;
+		}
+
+		if ( $from ) {
+			if ( $from == $title->getDBkey() ) {
+				$from = null;
+			} else {
+				$ignored++;
+				continue;
+			}
+		}
+
+		if ( $checkUserBlock && ( ( $processed % $checkUserBlock ) == 0 ) ) {
+			$user->clearInstanceCache( 'name' ); // reload from DB!
+			if ( $user->isBlocked() ) {
+				echo( $user->getName() . " was blocked! Aborting.\n" );
+				break;
+			}
+		}
+
+		# Check existence
+		$image = wfLocalFile( $title );
+		if ( $image->exists() ) {
+			if ( isset( $options['overwrite'] ) ) {
+				echo( "{$base} exists, overwriting..." );
+				$svar = 'overwritten';
+			} else {
+				echo( "{$base} exists, skipping\n" );
+				$skipped++;
+				continue;
+			}
+		} else {
+			if ( isset( $options['skip-dupes'] ) ) {
+				$repo = $image->getRepo();
+				$sha1 = File::sha1Base36( $file ); # XXX: we end up calculating this again when actually uploading. that sucks.
+
+				$dupes = $repo->findBySha1( $sha1 );
+
+				if ( $dupes ) {
+					echo( "{$base} already exists as " . $dupes[0]->getName() . ", skipping\n" );
+					$skipped++;
+					continue;
+				}
+			}
+
+			echo( "Importing {$base}..." );
+			$svar = 'added';
+		}
+
+		if ( isset( $options['source-wiki-url'] ) ) {
+			/* find comment text directly from source wiki, through MW's API */
+			$real_comment = getFileCommentFromSourceWiki( $options['source-wiki-url'], $base );
+			if ( $real_comment === false )
+				$commentText = $comment;
+			else
+				$commentText = $real_comment;
+
+			/* find user directly from source wiki, through MW's API */
+			$real_user = getFileUserFromSourceWiki( $options['source-wiki-url'], $base );
+			if ( $real_user === false ) {
+				$wgUser = $user;
+			} else {
+				$wgUser = User::newFromName( $real_user );
+				if ( $wgUser === false ) {
+					# user does not exist in target wiki
+					echo ( "failed: user '$real_user' does not exist in target wiki." );
+					continue;
+				}
+			}
+		} else {
+			# Find comment text
+			$commentText = false;
+
+			if ( $commentExt ) {
+				$f = findAuxFile( $file, $commentExt );
+				if ( !$f ) {
+					echo( " No comment file with extension {$commentExt} found for {$file}, using default comment. " );
+				} else {
+					$commentText = file_get_contents( $f );
+					if ( !$commentText ) {
+						echo( " Failed to load comment file {$f}, using default comment. " );
+					}
+				}
+			}
+
+			if ( !$commentText ) {
+				$commentText = $comment;
+			}
+		}
+
+		# Import the file
+		if ( isset( $options['dry'] ) ) {
+			echo( " publishing {$file} by '" . $wgUser->getName() . "', comment '$commentText'... " );
+		} else {
+			$archive = $image->publish( $file );
+			if ( !$archive->isGood() ) {
+				echo( "failed. (" .
+					$archive->getWikiText() .
+					")\n" );
+				$failed++;
+				continue;
+			}
+		}
+
+		if ( isset( $options['dry'] ) ) {
+			echo( "done.\n" );
+		} elseif ( $image->recordUpload( $archive->value, $commentText, $license ) ) {
+			# We're done!
+			echo( "done.\n" );
+
+			$doProtect = false;
+
+			global $wgRestrictionLevels;
+
+			$protectLevel = isset( $options['protect'] ) ? $options['protect'] : null;
+
+			if ( $protectLevel && in_array( $protectLevel, $wgRestrictionLevels ) ) {
+				$doProtect = true;
+			}
+			if ( isset( $options['unprotect'] ) ) {
+				$protectLevel = '';
+				$doProtect = true;
+			}
+
+			if ( $doProtect ) {
+					# Protect the file
+					echo "\nWaiting for slaves...\n";
+					// Wait for slaves.
+					sleep( 2.0 ); # Why this sleep?
+					wfWaitForSlaves();
+
+					echo( "\nSetting image restrictions ... " );
+
+					$cascade = false;
+					$restrictions = array();
+					foreach( $title->getRestrictionTypes() as $type ) {
+						$restrictions[$type] = $protectLevel;
+					}
+
+					$page = WikiPage::factory( $title );
+					$status = $page->doUpdateRestrictions( $restrictions, array(), $cascade, '', $user );
+					echo( ( $status->isOK() ? 'done' : 'failed' ) . "\n" );
+			}
+
+		} else {
+			echo( "failed. (at recordUpload stage)\n" );
+			$svar = 'failed';
+		}
+
+		$$svar++;
+		$processed++;
+
+		if ( $limit && $processed >= $limit ) {
+			break;
+		}
+
+		if ( $sleep ) {
+			sleep( $sleep );
+		}
+	}
+
+	# Print out some statistics
+	echo( "\n" );
+	foreach ( array( 'count' => 'Found', 'limit' => 'Limit', 'ignored' => 'Ignored',
+		'added' => 'Added', 'skipped' => 'Skipped', 'overwritten' => 'Overwritten',
+		'failed' => 'Failed' ) as $var => $desc ) {
+		if ( $$var > 0 )
+			echo( "{$desc}: {$$var}\n" );
+	}
+
+} else {
+	echo( "No suitable files could be found for import.\n" );
+}
+
+exit( 0 );
+
+function showUsage( $reason = false ) {
+	if ( $reason ) {
+		echo( $reason . "\n" );
+	}
+
+	echo <<<TEXT
+Imports images and other media files into the wiki
+USAGE: php importImages.php [options] <dir>
+
+<dir> : Path to the directory containing images to be imported
+
+Options:
+--extensions=<exts>	Comma-separated list of allowable extensions, defaults to \$wgFileExtensions
+--overwrite		Overwrite existing images with the same name (default is to skip them)
+--limit=<num>		Limit the number of images to process. Ignored or skipped images are not counted.
+--from=<name>		Ignore all files until the one with the given name. Useful for resuming
+						aborted imports. <name> should be the file's canonical database form.
+--skip-dupes		Skip images that were already uploaded under a different name (check SHA1)
+--sleep=<sec> 		Sleep between files. Useful mostly for debugging.
+--user=<username> 	Set username of uploader, default 'Maintenance script'
+--check-userblock 	Check if the user got blocked during import.
+--comment=<text>  	Set upload summary comment, default 'Importing image file'.
+--comment-file=<file>  	Set upload summary comment the the content of <file>.
+--comment-ext=<ext>  	Causes the comment for each file to be loaded from a file with the same name
+			but the extension <ext>. If a global comment is also given, it is appended.
+--license=<code>  	Use an optional license template
+--dry			Dry run, don't import anything
+--protect=<protect>     Specify the protect value (autoconfirmed,sysop)
+--unprotect             Unprotects all uploaded images
+--source-wiki-url   if specified, take User and Comment data for each imported file from this URL.
+					For example, --source-wiki-url="http://en.wikipedia.org/"
+
+TEXT;
+	exit( 1 );
+}

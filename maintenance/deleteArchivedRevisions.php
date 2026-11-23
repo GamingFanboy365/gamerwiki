@@ -1,64 +1,55 @@
 <?php
+
 /**
  * Delete archived (deleted from public) revisions from the database
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
+ * @ingroup Maintenance
+ * @author Aaron Schulz
  * Shamelessly stolen from deleteOldRevisions.php by Rob Church :)
- *
- * @license GPL-2.0-or-later
- * @file
- * @ingroup Maintenance
  */
 
-use MediaWiki\Maintenance\Maintenance;
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
+require_once( dirname( __FILE__ ) . '/deleteArchivedRevisions.inc' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script to delete archived (deleted from public) revisions
- * from the database.
- *
- * @ingroup Maintenance
- */
 class DeleteArchivedRevisions extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription(
-			"Deletes all archived revisions\nThese revisions will no longer be restorable" );
+		$this->mDescription = "Deletes all archived revisions\nThese revisions will no longer be restorable";
 		$this->addOption( 'delete', 'Performs the deletion' );
 	}
 
+	public function handleOutput( $str ) {
+		$this->output( $str );
+	}
+
 	public function execute() {
-		$dbw = $this->getPrimaryDB();
-
-		if ( !$this->hasOption( 'delete' ) ) {
-			$count = $dbw->newSelectQueryBuilder()
-				->select( 'COUNT(*)' )
-				->from( 'archive' )
-				->caller( __METHOD__ )
-				->fetchField();
-			$this->output( "Found $count revisions to delete.\n" );
-			$this->output( "Please run the script again with the --delete option "
-				. "to really delete the revisions.\n" );
-			return;
-		}
-
-		$this->output( "Deleting archived revisions..." );
-		$dbw->newDeleteQueryBuilder()
-			->deleteFrom( 'archive' )
-			->where( '*' )
-			->caller( __METHOD__ )->execute();
-		$count = $dbw->affectedRows();
-		$this->output( "done. $count revisions deleted.\n" );
-
-		if ( $count ) {
-			$this->purgeRedundantText( true );
+		$this->output( "Delete archived revisions\n\n" );
+		# Data should come off the master, wrapped in a transaction
+		if ( $this->hasOption( 'delete' ) ) {
+			DeleteArchivedRevisionsImplementation::doDelete( $this );
+		} else {
+			$dbw = wfGetDB( DB_MASTER );
+			$res = $dbw->selectRow( 'archive', 'COUNT(*) as count', array(), __FUNCTION__ );
+			$this->output( "Found {$res->count} revisions to delete.\n" );
+			$this->output( "Please run the script again with the --delete option to really delete the revisions.\n" );
 		}
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = DeleteArchivedRevisions::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "DeleteArchivedRevisions";
+require_once( RUN_MAINTENANCE_IF_MAIN );

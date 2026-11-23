@@ -1,30 +1,60 @@
-== User Information ==
+GamerWiki extensions
+====================
 
-Extensions are distributed separately. Drop them into this directory and enable
-as per the extension's installation instructions.
+Bundled (always on)
+-------------------
 
-You can find a list of extensions and documentation at
-<https://www.mediawiki.org/wiki/Special:MyLanguage/Category:Extensions>.
+These are part of GamerWiki. They are loaded by includes/DefaultSettings.php
+($wgGamerWikiBundledExtensions), need no line in LocalSettings.php, and
+are not offered by the installer. They are the versions made for
+MediaWiki 1.19 (2012-2014), fixed to run on PHP 8, with their optional
+JavaScript removed.
 
-== Development Information ==
+  Extension               Version used              License
+  ----------------------  ------------------------  ------------------------
+  ParserFunctions         REL1_19 (1.4.1)           GPL-2.0-or-later
+  Cite (+ Special:Cite)   REL1_19                   GPL-2.0-or-later
+  CharInsert              REL1_19                   GPL-2.0-or-later
+  ImageMap                REL1_19                   GPL-2.0-or-later
+  InputBox                REL1_19                   Public domain
+  Poem                    REL1_19                   Permissive ("any purpose")
+  Interwiki               REL1_19                   GPL-2.0-or-later
+  Nuke                    REL1_19                   GPL-2.0-or-later
+  Renameuser              REL1_19                   GPL-2.0-or-later
+  ReplaceText             0.9.5                     GPL-2.0-or-later
+  SyntaxHighlight_GeSHi   REL1_19 + GeSHi 1.0.8.10  GPL-2.0-or-later
+  PdfHandler              REL1_19                   GPL-2.0-or-later
+  DPLforum                REL1_21                   GPL-2.0-or-later
+  Variables               REL1_21                   ISC
+  Loops                   REL1_21                   GPL-2.0-or-later
+  WikiSEO                 1.2.0                     GPL-2.0-or-later
 
-If you are a developer, you might want to fetch the extension tree in another
-directory and make a symbolic link:
+All of these licenses allow the code to be distributed as part of
+GamerWiki under the GNU GPL version 2 or later (see COPYING).
 
- mediawiki/extensions$ ln -s ../../extensions-trunk/FooBar
+GamerWiki changes to them: PHP 8 fixes (constructors, create_function,
+pass-by-reference parser arguments, newer-MediaWiki calls in WikiSEO), an
+edit-token check on Special:ReplaceText, and removal of Cite's reference
+popups and ReplaceText's "invert selection" button (both JavaScript).
 
-Most extensions are available through Git:
-    https://gerrit.wikimedia.org/g/mediawiki/extensions
+PdfHandler draws PDF thumbnails with Ghostscript ("gs") and reads PDF text
+with pdfinfo/pdftotext (poppler-utils). Without them, PDFs still upload and
+link, just without a preview.
 
+Also built into core instead of bundled: __DISAMBIG__ (Disambiguator) and
+__EXPECTUNUSEDCATEGORY__.
 
-Please note that under POSIX systems (Linux...), parent of a symbolic path
-refers to the link source, NOT to the target! You should check the env
-variable MW_INSTALL_PATH in case the extension is not in the default location.
+Left out on purpose
+-------------------
 
-The following code snippet lets you override the default path:
+  Scribunto (Lua), TimedMediaHandler, Math (needs texvc, LaTeX and dvipng),
+  PageImages and TextExtracts (API-only), and every skin except MonoBook.
 
- $IP = getenv( 'MW_INSTALL_PATH' );
- if ( $IP === false ) {
-	$IP = __DIR__ . '/../..';
- }
- require_once "$IP/maintenance/Maintenance.php"; // a MediaWiki core file
+Optional
+--------
+
+ConfirmEdit (CAPTCHAs), Gadgets (user JavaScript/CSS gadgets) and
+WikiEditor (the JavaScript editing toolbar) ship in this directory but are
+off unless you enable them in the installer or with a require_once line in
+LocalSettings.php. Other 1.19-compatible extensions can be added the same
+way: put them in a folder here and follow their install instructions.

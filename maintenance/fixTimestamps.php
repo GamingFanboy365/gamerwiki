@@ -1,33 +1,35 @@
 <?php
 /**
- * Fixes timestamp corruption caused by one or more webservers temporarily
- * being set to the wrong time.
- * The time offset must be known and consistent. Start and end times
- * (in 14-character format) restrict the search, and must bracket the damage.
- * There must be a majority of good timestamps in the search period.
+ * This script fixes timestamp corruption caused by one or more webservers
+ * temporarily being set to the wrong time. The time offset must be known and
+ * consistent. Start and end times (in 14-character format) restrict the search,
+ * and must bracket the damage. There must be a majority of good timestamps in the
+ * search period.
  *
- * @license GPL-2.0-or-later
- * @file
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+ * http://www.gnu.org/copyleft/gpl.html
+ *
  * @ingroup Maintenance
  */
 
-use MediaWiki\Maintenance\Maintenance;
-use Wikimedia\Timestamp\TimestampFormat as TS;
+require_once( dirname( __FILE__ ) . '/Maintenance.php' );
 
-// @codeCoverageIgnoreStart
-require_once __DIR__ . '/Maintenance.php';
-// @codeCoverageIgnoreEnd
-
-/**
- * Maintenance script that fixes timestamp corruption caused by one or
- * more webservers temporarily being set to the wrong time.
- *
- * @ingroup Maintenance
- */
 class FixTimestamps extends Maintenance {
 	public function __construct() {
 		parent::__construct();
-		$this->addDescription( '' );
+		$this->mDescription = "";
 		$this->addArg( 'offset', '' );
 		$this->addArg( 'start', 'Starting timestamp' );
 		$this->addArg( 'end', 'Ending timestamp' );
@@ -37,18 +39,17 @@ class FixTimestamps extends Maintenance {
 		$offset = $this->getArg( 0 ) * 3600;
 		$start = $this->getArg( 1 );
 		$end = $this->getArg( 2 );
-		// maximum normal clock offset
-		$grace = 60;
+		$grace = 60; // maximum normal clock offset
 
 		# Find bounding revision IDs
-		$dbw = $this->getPrimaryDB();
+		$dbw = wfGetDB( DB_MASTER );
 		$revisionTable = $dbw->tableName( 'revision' );
 		$res = $dbw->query( "SELECT MIN(rev_id) as minrev, MAX(rev_id) as maxrev FROM $revisionTable " .
 			"WHERE rev_timestamp BETWEEN '{$start}' AND '{$end}'", __METHOD__ );
-		$row = $res->fetchObject();
+		$row = $dbw->fetchObject( $res );
 
-		if ( $row->minrev === null ) {
-			$this->fatalError( "No revisions in search period." );
+		if ( is_null( $row->minrev ) ) {
+			$this->error( "No revisions in search period.", true );
 		}
 
 		$minRev = $row->minrev;
@@ -67,20 +68,22 @@ class FixTimestamps extends Maintenance {
 		$res = $dbw->query( $sql, __METHOD__ );
 
 		$lastNormal = 0;
-		$badRevs = [];
+		$badRevs = array();
 		$numGoodRevs = 0;
 
 		foreach ( $res as $row ) {
-			$timestamp = (int)wfTimestamp( TS::UNIX, $row->rev_timestamp );
+			$timestamp = wfTimestamp( TS_UNIX, $row->rev_timestamp );
 			$delta = $timestamp - $lastNormal;
 			$sign = $delta == 0 ? 0 : $delta / abs( $delta );
 			if ( $sign == 0 || $sign == $expectedSign ) {
 				// Monotonic change
 				$lastNormal = $timestamp;
-				++$numGoodRevs;
+				++ $numGoodRevs;
+				continue;
 			} elseif ( abs( $delta ) <= $grace ) {
 				// Non-monotonic change within grace interval
-				++$numGoodRevs;
+				++ $numGoodRevs;
+				continue;
 			} else {
 				// Non-monotonic change larger than grace interval
 				$badRevs[] = $row->rev_id;
@@ -89,17 +92,17 @@ class FixTimestamps extends Maintenance {
 
 		$numBadRevs = count( $badRevs );
 		if ( $numBadRevs > $numGoodRevs ) {
-			$this->fatalError(
-				"The majority of revisions in the search interval are marked as bad.
+			$this->error(
+		"The majority of revisions in the search interval are marked as bad.
 
 		Are you sure the offset ($offset) has the right sign? Positive means the clock
 		was incorrectly set forward, negative means the clock was incorrectly set back.
 
 		If the offset is right, then increase the search interval until there are enough
-		good revisions to provide a majority reference." );
+		good revisions to provide a majority reference.", true );
 		} elseif ( $numBadRevs == 0 ) {
 			$this->output( "No bad revisions found.\n" );
-			return;
+			exit( 0 );
 		}
 
 		$this->output( sprintf( "Fixing %d revisions (%.2f%% of revisions in search interval)\n",
@@ -107,15 +110,12 @@ class FixTimestamps extends Maintenance {
 
 		$fixup = -$offset;
 		$sql = "UPDATE $revisionTable " .
-			"SET rev_timestamp="
-				. "DATE_FORMAT(DATE_ADD(rev_timestamp, INTERVAL $fixup SECOND), '%Y%m%d%H%i%s') " .
+			"SET rev_timestamp=DATE_FORMAT(DATE_ADD(rev_timestamp, INTERVAL $fixup SECOND), '%Y%m%d%H%i%s') " .
 			"WHERE rev_id IN (" . $dbw->makeList( $badRevs ) . ')';
 		$dbw->query( $sql, __METHOD__ );
 		$this->output( "Done\n" );
 	}
 }
 
-// @codeCoverageIgnoreStart
-$maintClass = FixTimestamps::class;
-require_once RUN_MAINTENANCE_IF_MAIN;
-// @codeCoverageIgnoreEnd
+$maintClass = "FixTimestamps";
+require_once( RUN_MAINTENANCE_IF_MAIN );
