@@ -1,0 +1,12 @@
+# Per-install files: never commit these
+/LocalSettings.php
+/data/
+/images/*
+!/images/.htaccess
+!/images/README
+/cache/*
+!/cache/.htaccess
+*.sqlite
+*.sqlite3
+*.log
+.DS_Store

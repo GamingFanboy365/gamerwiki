@@ -496,17 +496,6 @@ class Preferences {
 			);
 		}
 
-		$selectedSkin = $user->getOption( 'skin' );
-		if ( in_array( $selectedSkin, array( 'cologneblue', 'standard' ) ) ) {
-			$settings = array_flip( $context->getLanguage()->getQuickbarSettings() );
-
-			$defaultPreferences['quickbar'] = array(
-				'type' => 'radio',
-				'options' => $settings,
-				'section' => 'rendering/skin',
-				'label-message' => 'qbsettings',
-			);
-		}
 	}
 
 	/**
@@ -951,7 +940,7 @@ class Preferences {
 	 * @param $defaultPreferences Array
 	 */
 	static function searchPreferences( $user, IContextSource $context, &$defaultPreferences ) {
-		global $wgContLang, $wgEnableMWSuggest, $wgVectorUseSimpleSearch;
+		global $wgContLang, $wgEnableMWSuggest;
 
 		## Search #####################################
 		$defaultPreferences['searchlimit'] = array(
@@ -966,14 +955,6 @@ class Preferences {
 				'type' => 'toggle',
 				'label-message' => 'mwsuggest-disable',
 				'section' => 'searchoptions/displaysearchoptions',
-			);
-		}
-
-		if ( $wgVectorUseSimpleSearch ) {
-			$defaultPreferences['vector-simplesearch'] = array(
-				'type' => 'toggle',
-				'label-message' => 'vector-simplesearch-preference',
-				'section' => 'searchoptions/displaysearchoptions'
 			);
 		}
 

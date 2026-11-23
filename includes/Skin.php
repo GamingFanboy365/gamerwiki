@@ -108,24 +108,12 @@ abstract class Skin extends ContextSource {
 			return $key;
 		}
 
-		// Older versions of the software used a numeric setting
-		// in the user preferences.
-		$fallback = array(
-			0 => $wgDefaultSkin,
-			1 => 'nostalgia',
-			2 => 'cologneblue'
-		);
-
-		if ( isset( $fallback[$key] ) ) {
-			$key = $fallback[$key];
-		}
-
-		if ( isset( $skinNames[$key] ) ) {
-			return $key;
-		} elseif ( isset( $skinNames[$wgDefaultSkin] ) ) {
+		// Unknown or removed skin (GamerWiki ships MonoBook only): fall back
+		// to the configured default, and to MonoBook if that is broken too.
+		if ( isset( $skinNames[$wgDefaultSkin] ) ) {
 			return $wgDefaultSkin;
 		} else {
-			return 'vector';
+			return 'monobook';
 		}
 	}
 
@@ -162,9 +150,9 @@ abstract class Skin extends ContextSource {
 				# except by SQL manipulation if a previously valid skin name
 				# is no longer valid.
 				wfDebug( "Skin class does not exist: $className\n" );
-				$className = 'SkinVector';
+				$className = 'SkinMonoBook';
 				if ( !defined( 'MW_COMPILED' ) ) {
-					require_once( "{$wgStyleDirectory}/Vector.php" );
+					require_once( "{$wgStyleDirectory}/MonoBook.php" );
 				}
 			}
 		}

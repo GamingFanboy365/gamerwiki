@@ -2328,7 +2328,7 @@ $wgValidateAllHtml = false;
  * This has to be completely lowercase; see the "skins" directory for the list
  * of available skins.
  */
-$wgDefaultSkin = 'vector';
+$wgDefaultSkin = 'monobook';
 
 /**
  * Specify the name of a skin that should not be presented in the list of
@@ -2493,20 +2493,6 @@ $wgFooterIcons = array(
  * false = split login and create account into two separate links
  */
 $wgUseCombinedLoginLink = true;
-
-/**
- * Search form behavior for Vector skin only
- * true = use an icon search button
- * false = use Go & Search buttons
- */
-$wgVectorUseSimpleSearch = false;
-
-/**
- * Watch and unwatch as an icon rather than a link for Vector skin only
- * true = use an icon watch/unwatch button
- * false = use watch/unwatch text link
- */
-$wgVectorUseIconWatch = false;
 
 /**
  * Display user edit counts in various prominent places.
