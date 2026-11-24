@@ -6,7 +6,23 @@ It is MediaWiki 1.19.24 (the last long-term-support release before Lua and OOUI)
 
 ## Quick start
 
-You need PHP 8.1 or newer with the `pdo_sqlite` extension. That's all: no web server and no database server.
+GamerWiki needs PHP 8.1 or newer and nothing else: no web server and no database server. On Linux Mint 21 or 22, Ubuntu 22.04 or newer, or Debian 12, install PHP with:
+
+```bash
+sudo apt install php-cli php-sqlite3 php-xml git
+```
+
+Get GamerWiki (using git makes `./gamerwiki update` work later):
+
+```bash
+git clone https://github.com/GamingFanboy365/gamerwiki.git
+```
+
+```bash
+cd gamerwiki
+```
+
+Create your wiki. It asks for an admin password, and suggests optional extras such as thumbnail support if they're missing:
 
 ```bash
 ./gamerwiki install "My Game Wiki" YourName
@@ -25,7 +41,11 @@ Then open http://127.0.0.1:8080/. The wiki is stored in `data/` (database) and `
 | `./gamerwiki backup` | Copy the database to `data/backups/` (safe while running) |
 | `./gamerwiki update` | Back up, pull the latest GamerWiki, update the database |
 
-Optional programs: ImageMagick for thumbnails (otherwise PHP's GD is used), Ghostscript and poppler-utils for PDF previews.
+Optional extras: `imagemagick` (or `php-gd`) for thumbnails, `php-intl` and `php-mbstring` for faster text handling, and `ghostscript` for PDF previews. If something required is missing, the launcher says exactly which package to install.
+
+If you downloaded a ZIP instead of using git and get "Permission denied", run the launcher as `sh gamerwiki ...` instead.
+
+**Linux Mint 20 / Ubuntu 20.04** only offer PHP 7.4, which GamerWiki doesn't support, and these systems no longer get security updates. Upgrade to Linux Mint 21 or 22 first with Mint's upgrade tool (`sudo apt install mintupgrade`, then `sudo mintupgrade`), following the upgrade guide on the Linux Mint blog.
 
 ## Moving an existing wiki in
 

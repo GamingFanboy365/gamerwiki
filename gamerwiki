@@ -7,7 +7,8 @@
 #   ./gamerwiki backup                        copy the database to data/backups/
 #
 # The server only listens on 127.0.0.1, so nothing else on your network can
-# reach the wiki. Needs PHP 8.1 or newer with the pdo_sqlite extension.
+# reach the wiki. Needs PHP 8.1 or newer; on Linux Mint, Ubuntu or Debian:
+#   sudo apt install php-cli php-sqlite3 php-xml
 
 set -e
 IP=$(cd "$(dirname "$0")" && pwd)
@@ -15,10 +16,51 @@ PORT_DEFAULT=8080
 
 die() { echo "gamerwiki: $*" >&2; exit 1; }
 
+APT_PACKAGES="php-cli php-sqlite3 php-xml"
+
 check_php() {
-	command -v php >/dev/null 2>&1 || die "PHP is not installed (need PHP 8.1+ with pdo_sqlite)."
-	php -r 'exit(PHP_VERSION_ID >= 80100 ? 0 : 1);' || die "PHP 8.1 or newer is required (found $(php -r 'echo PHP_VERSION;'))."
-	php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);' || die "The PHP pdo_sqlite extension is required."
+	command -v php >/dev/null 2>&1 || die "PHP is not installed. On Linux Mint, Ubuntu or Debian run:
+    sudo apt install $APT_PACKAGES"
+
+	if ! php -r 'exit(PHP_VERSION_ID >= 80100 ? 0 : 1);'; then
+		msg="PHP 8.1 or newer is required, but this computer has PHP $(php -r 'echo PHP_VERSION;')."
+		# Linux Mint 20 and Ubuntu 20.04 ("focal") only offer PHP 7.4
+		if grep -qs 'focal' /etc/os-release /etc/upstream-release/lsb-release; then
+			msg="$msg
+Linux Mint 20 / Ubuntu 20.04 only offer PHP 7.4 and no longer get security
+updates. Upgrade to Linux Mint 21 (PHP 8.1) or 22 (PHP 8.3) with Mint's
+upgrade tool (sudo apt install mintupgrade, then sudo mintupgrade), then
+run this again."
+		fi
+		die "$msg"
+	fi
+
+	# Required extensions, mapped to the Debian/Ubuntu/Mint package providing them
+	missing=$(php -r '
+		$need = array( "pdo_sqlite" => "php-sqlite3", "xml" => "php-xml", "dom" => "php-xml", "xmlreader" => "php-xml" );
+		$m = array();
+		foreach ( $need as $ext => $pkg ) { if ( !extension_loaded( $ext ) ) { $m[$pkg] = true; } }
+		echo implode( " ", array_keys( $m ) );')
+	[ -z "$missing" ] || die "some PHP parts are missing. On Linux Mint, Ubuntu or Debian run:
+    sudo apt install $missing"
+}
+
+# Optional extras: say what each would add, never stop for them
+suggest_extras() {
+	tips=""
+	if ! command -v convert >/dev/null 2>&1 && ! php -r 'exit(extension_loaded("gd") ? 0 : 1);'; then
+		tips="$tips imagemagick"
+		echo "Tip: install imagemagick (or php-gd) so uploaded images get thumbnails."
+	fi
+	if ! php -r 'exit(extension_loaded("intl") && extension_loaded("mbstring") ? 0 : 1);'; then
+		tips="$tips php-intl php-mbstring"
+		echo "Tip: php-intl and php-mbstring make text handling faster."
+	fi
+	if ! command -v gs >/dev/null 2>&1; then
+		tips="$tips ghostscript"
+		echo "Tip: ghostscript gives PDF uploads a preview image."
+	fi
+	[ -z "$tips" ] || echo "     sudo apt install$tips"
 }
 
 # PHP settings for every run: no errors in pages, room for big uploads.
@@ -46,6 +88,7 @@ cmd_install() {
 	[ $# -ge 2 ] || die 'usage: ./gamerwiki install "Wiki name" AdminName [port]'
 	name=$1 admin=$2 port=${3:-$PORT_DEFAULT}
 	[ -f "$IP/LocalSettings.php" ] && die "LocalSettings.php already exists; this wiki is already installed."
+	suggest_extras
 	dbname=$(printf '%s' "$name" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9')
 	[ -n "$dbname" ] || dbname=gamerwiki
 	mkdir -p "$IP/data"
