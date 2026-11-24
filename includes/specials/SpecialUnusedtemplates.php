@@ -41,16 +41,23 @@ class UnusedtemplatesPage extends QueryPage {
 
 	function getQueryInfo() {
 		return array (
-			'tables' => array ( 'page', 'templatelinks' ),
+			'tables' => array ( 'page', 'templatelinks', 'page_props' ),
 			'fields' => array ( 'page_namespace AS namespace',
 					'page_title AS title',
 					'page_title AS value' ),
 			'conds' => array ( 'page_namespace' => NS_TEMPLATE,
 					'tl_from IS NULL',
-					'page_is_redirect' => 0 ),
-			'join_conds' => array ( 'templatelinks' => array (
-				'LEFT JOIN', array ( 'tl_title = page_title',
-					'tl_namespace = page_namespace' ) ) )
+					'page_is_redirect' => 0,
+					// GamerWiki (backported from modern MediaWiki): skip
+					// templates marked __EXPECTUNUSEDTEMPLATE__
+					'pp_page IS NULL' ),
+			'join_conds' => array (
+				'templatelinks' => array (
+					'LEFT JOIN', array ( 'tl_title = page_title',
+						'tl_namespace = page_namespace' ) ),
+				'page_props' => array (
+					'LEFT JOIN', array ( 'page_id = pp_page',
+						'pp_propname' => 'expectunusedtemplate' ) ) )
 		);
 	}
 

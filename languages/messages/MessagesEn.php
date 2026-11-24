@@ -341,6 +341,7 @@ $magicWords = array(
 	'tag'                    => array( 0,    'tag'                    ),
 	'hiddencat'              => array( 1,    '__METACAT__', '__HIDDENCAT__' ),
 	'expectunusedcategory'   => array( 1,    '__EXPECTUNUSEDCATEGORY__', '__EXPECTUNUSEDCATEGORIES__' ),
+	'expectunusedtemplate'   => array( 1,    '__EXPECTUNUSEDTEMPLATE__' ),
 	'disambiguation'         => array( 1,    '__DISAMBIG__'           ),
 	'pagesincategory'        => array( 1,    'PAGESINCATEGORY', 'PAGESINCAT' ),
 	'pagesize'               => array( 1,    'PAGESIZE'               ),
@@ -2444,7 +2445,8 @@ Input: contenttype/subtype, e.g. <code>image/jpeg</code>.',
 'unusedtemplates'         => 'Unused templates',
 'unusedtemplates-summary' => '', # do not translate or duplicate this message to other languages
 'unusedtemplatestext'     => 'This page lists all pages in the {{ns:template}} namespace that are not included in another page.
-Remember to check for other links to the templates before deleting them.',
+Remember to check for other links to the templates before deleting them.
+Templates marked with <nowiki>__EXPECTUNUSEDTEMPLATE__</nowiki> (for example ones meant only for substitution) are not listed.',
 'unusedtemplateswlh'      => 'other links',
 
 # Random page
