@@ -35,9 +35,13 @@ run this again."
 		die "$msg"
 	fi
 
-	# Required extensions, mapped to the Debian/Ubuntu/Mint package providing them
+	# Required extensions, mapped to the Debian/Ubuntu/Mint package providing
+	# them. Package names carry the running PHP version (php8.4-xml), because
+	# with an extra PHP source such as a PPA the plain php-xml can pull in a
+	# different PHP version than the one in use.
 	missing=$(php -r '
-		$need = array( "pdo_sqlite" => "php-sqlite3", "xml" => "php-xml", "dom" => "php-xml", "xmlreader" => "php-xml" );
+		$v = "php" . PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;
+		$need = array( "pdo_sqlite" => "$v-sqlite3", "xml" => "$v-xml", "dom" => "$v-xml", "xmlreader" => "$v-xml" );
 		$m = array();
 		foreach ( $need as $ext => $pkg ) { if ( !extension_loaded( $ext ) ) { $m[$pkg] = true; } }
 		echo implode( " ", array_keys( $m ) );')
@@ -48,13 +52,14 @@ run this again."
 # Optional extras: say what each would add, never stop for them
 suggest_extras() {
 	tips=""
+	v=$(php -r 'echo "php" . PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')
 	if ! command -v convert >/dev/null 2>&1 && ! php -r 'exit(extension_loaded("gd") ? 0 : 1);'; then
 		tips="$tips imagemagick"
-		echo "Tip: install imagemagick (or php-gd) so uploaded images get thumbnails."
+		echo "Tip: install imagemagick (or $v-gd) so uploaded images get thumbnails."
 	fi
 	if ! php -r 'exit(extension_loaded("intl") && extension_loaded("mbstring") ? 0 : 1);'; then
-		tips="$tips php-intl php-mbstring"
-		echo "Tip: php-intl and php-mbstring make text handling faster."
+		tips="$tips $v-intl $v-mbstring"
+		echo "Tip: $v-intl and $v-mbstring make text handling faster."
 	fi
 	if ! command -v gs >/dev/null 2>&1; then
 		tips="$tips ghostscript"
