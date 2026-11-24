@@ -39,6 +39,7 @@ Export the pages from the old wiki with Special:Export (or `dumpBackup.php`), th
 
 - `__METACAT__` (the old `__HIDDENCAT__` still works): meta categories are always shown, on their own row under the content categories.
 - `__EXPECTUNUSEDCATEGORY__` keeps an intentionally empty category off Special:UnusedCategories.
+- `__EXPECTUNUSEDTEMPLATE__` keeps a template that is meant to go unused (for example one that is only ever substituted) off Special:UnusedTemplates.
 - `__DISAMBIG__`, Special:DisambiguationPages, and disambiguation-aware Special:Disambiguations, LonelyPages and ShortPages.
 - SVG files are shown as SVG, sharp at any size (`$wgSVGNativeRendering`).
 
